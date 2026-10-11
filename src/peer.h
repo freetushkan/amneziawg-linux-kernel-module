@@ -7,8 +7,10 @@
 #define _WG_PEER_H
 
 #include "device.h"
+#include "messages.h"
 #include "noise.h"
 #include "cookie.h"
+#include "type.h"
 
 #include <linux/types.h>
 #include <linux/netfilter.h>
@@ -40,6 +42,8 @@ struct wg_peer {
 	struct sk_buff_head staged_packet_queue;
 	int serial_work_cpu;
 	bool is_dead;
+	bool timer_need_another_keepalive;
+	bool sent_lastminute_handshake;
 	struct noise_keypairs keypairs;
 	struct endpoint endpoint;
 	struct dst_cache endpoint_cache;
@@ -54,9 +58,8 @@ struct wg_peer {
 	struct timer_list timer_new_handshake, timer_zero_key_material;
 	struct timer_list timer_persistent_keepalive;
 	unsigned int timer_handshake_attempts;
-	u16 persistent_keepalive_interval;
-	bool timer_need_another_keepalive;
-	bool sent_lastminute_handshake;
+	unsigned int max_handshake_attempts;
+	u32 persistent_keepalive_interval;
 	struct timespec64 walltime_last_handshake;
 	struct kref refcount;
 	struct rcu_head rcu;
@@ -68,6 +71,7 @@ struct wg_peer {
 	bool advanced_security;
 	bool ranged_headers;
 	bool junk_offsets;
+	unsigned int udp_window;
 };
 
 struct wg_peer *wg_peer_create(struct wg_device *wg,
@@ -86,5 +90,40 @@ void wg_peer_remove_all(struct wg_device *wg);
 
 int wg_peer_init(void);
 void wg_peer_uninit(void);
+
+static inline void wg_peer_reset_last_sent_handshake(struct wg_peer *peer)
+{
+	u16 timeout = !u16_range_is_zero(peer->device->rekey_timeout) ? u16_range_lo(peer->device->rekey_timeout) : REKEY_TIMEOUT;
+	atomic64_set(&peer->last_sent_handshake, ktime_get_coarse_boottime_ns() -
+				       (u64)(timeout + 1) * NSEC_PER_SEC);
+}
+
+static inline unsigned int wg_peer_skb_random_trailer(struct wg_peer *peer,
+									struct wg_device *wg, unsigned int size)
+{
+	unsigned int udp_window = peer
+		? READ_ONCE(peer->udp_window)
+		: DEFAULT_UDP_WINDOW;
+
+	return wg->random_trailers && udp_window > size
+		? get_random_u32_below(udp_window - size)
+		: 0;
+}
+
+static inline unsigned int wg_peer_skb_randomize_padding_addition(struct wg_peer *peer,
+									  			struct wg_device *wg, unsigned int size)
+{
+	unsigned int udp_window = peer
+		? READ_ONCE(peer->udp_window)
+		: DEFAULT_UDP_WINDOW;
+	u16 add, space;
+
+	if (udp_window < size)
+		return 0;
+
+	add = u16_range_pick_one(wg->content_padding_addition);
+	space = udp_window - size;
+	return min(add, space);
+}
 
 #endif /* _WG_PEER_H */
