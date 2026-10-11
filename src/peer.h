@@ -69,7 +69,23 @@ struct wg_peer {
 	u64 internal_id;
 	atomic_t jp_packet_counter;
 	unsigned int udp_window;
+	/* Negotiated/learned compatibility for this peer. */
+	bool advanced_security;
+	bool ranged_headers;
+	bool junk_offsets;
+	bool header_protection;
+	bool random_trailers;
+	bool content_padding_addition;
 };
+
+/* Select the on-wire header without making newer AWG features mandatory. */
+static inline u32 wg_compat_header(bool advanced_security, bool ranged_headers,
+				  u32_range_t range, u32 wireguard_type)
+{
+	if (!advanced_security)
+		return wireguard_type;
+	return ranged_headers ? u32_range_pick_one(range) : u32_range_lo(range);
+}
 
 struct wg_peer *wg_peer_create(struct wg_device *wg,
 			       const u8 public_key[NOISE_PUBLIC_KEY_LEN],
@@ -102,7 +118,8 @@ static inline unsigned int wg_peer_skb_random_trailer(struct wg_peer *peer,
 		? READ_ONCE(peer->udp_window)
 		: DEFAULT_UDP_WINDOW;
 
-	return wg->random_trailers && udp_window > size
+	return wg->random_trailers && (!peer || READ_ONCE(peer->random_trailers)) &&
+		udp_window > size
 		? get_random_u32_below(udp_window - size)
 		: 0;
 }

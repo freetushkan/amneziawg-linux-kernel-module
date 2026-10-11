@@ -64,6 +64,11 @@ struct packet_cb {
 	u32 type;
 	u32 padding;
 	u8 ds;
+	bool advanced_security;
+	bool ranged_headers;
+	bool junk_offsets;
+	bool header_protection;
+	bool random_trailers;
 	bool is_keepalive;
 };
 

@@ -20,7 +20,8 @@ int wg_socket_send_skb_to_peer(struct wg_peer *peer, struct sk_buff *skb,
 			       u8 ds);
 int wg_socket_send_buffer_as_reply_to_skb(struct wg_device *wg,
 					  struct sk_buff *in_skb,
-					  void *out_buffer, size_t len, size_t padding);
+					  void *out_buffer, size_t len, size_t padding,
+					  bool header_protection, bool trailer);
 
 int wg_socket_endpoint_from_skb(struct endpoint *endpoint,
 				const struct sk_buff *skb);

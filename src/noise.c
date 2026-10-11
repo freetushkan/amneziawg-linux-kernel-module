@@ -623,7 +623,12 @@ wg_noise_handshake_consume_initiation(struct message_handshake_initiation *src,
 			goto out;
 
 		net_dbg_skb_ratelimited("%s: unknown peer from %pISpfsc\n", wg->dev->name, skb);
-		wg_genl_mcast_peer_unknown(wg, s, endpoint);
+		wg_genl_mcast_peer_unknown(wg, s, endpoint,
+					   PACKET_CB(skb)->advanced_security,
+					   PACKET_CB(skb)->ranged_headers,
+					   PACKET_CB(skb)->junk_offsets,
+					   PACKET_CB(skb)->header_protection,
+					   PACKET_CB(skb)->random_trailers);
 		goto out;
 	}
 	handshake = &peer->handshake;

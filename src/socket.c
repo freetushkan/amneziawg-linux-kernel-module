@@ -215,7 +215,7 @@ int wg_socket_send_buffer_to_peer(struct wg_peer *peer, void *buffer,
 	if (trailer_len)
 		get_random_bytes(skb_put(skb, trailer_len), trailer_len);
 
-	if (crypto &&
+	if (crypto && peer->header_protection &&
 			awg_header_protection_init(&state, peer->device, crypto))
 		chacha20_crypt(&state, buffer, buffer, len);
 
@@ -224,7 +224,8 @@ int wg_socket_send_buffer_to_peer(struct wg_peer *peer, void *buffer,
 
 int wg_socket_send_buffer_as_reply_to_skb(struct wg_device *wg,
 					  struct sk_buff *in_skb, void *buffer,
-					  size_t len, size_t padding)
+					  size_t len, size_t padding,
+					  bool header_protection, bool trailer)
 {
 	int ret = 0;
 	struct sk_buff *skb;
@@ -239,7 +240,7 @@ int wg_socket_send_buffer_as_reply_to_skb(struct wg_device *wg,
 	if (unlikely(ret < 0))
 		return ret;
 
-	trailer_len = wg_peer_skb_random_trailer(NULL, wg, padding + len);
+	trailer_len = trailer ? wg_peer_skb_random_trailer(NULL, wg, padding + len) : 0;
 
 	skb = alloc_skb(padding + len + trailer_len + SKB_HEADER_LEN, GFP_ATOMIC);
 	if (unlikely(!skb))
@@ -257,7 +258,7 @@ int wg_socket_send_buffer_as_reply_to_skb(struct wg_device *wg,
 	if (trailer_len)
 		get_random_bytes(skb_put(skb, trailer_len), trailer_len);
 
-	if (crypto &&
+	if (crypto && header_protection &&
 			awg_header_protection_init(&state, wg, crypto))
 		chacha20_crypt(&state, buffer, buffer, len);
 

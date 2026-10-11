@@ -82,7 +82,12 @@ static const struct nla_policy peer_policy[WGPEER_A_MAX + 1] = {
 	[WGPEER_A_TX_BYTES]				= { .type = NLA_U64 },
 	[WGPEER_A_ALLOWEDIPS]				= { .type = NLA_NESTED },
 	[WGPEER_A_PROTOCOL_VERSION]			= { .type = NLA_U32 },
-	[WGPEER_A_ADVANCED_SECURITY]    		= { .type = NLA_FLAG }
+	[WGPEER_A_ADVANCED_SECURITY]    		= { .type = NLA_FLAG },
+	[WGPEER_A_RANGED_HEADERS]			= { .type = NLA_FLAG },
+	[WGPEER_A_JUNK_OFFSETS]				= { .type = NLA_FLAG },
+	[WGPEER_A_HEADER_PROTECTION]			= { .type = NLA_U8 },
+	[WGPEER_A_RANDOM_TRAILERS]			= { .type = NLA_U8 },
+	[WGPEER_A_CONTENT_PADDING_ADDITION_ENABLED]		= { .type = NLA_U8 }
 };
 
 static const struct nla_policy allowedip_policy[WGALLOWEDIP_A_MAX + 1] = {
@@ -302,6 +307,24 @@ get_peer(struct wg_peer *peer, struct sk_buff *skb, struct dump_ctx *ctx)
 	fail = nla_put_u32(skb, WGPEER_A_FLAGS, WGPEER_F_HAS_ADVANCED_SECURITY);
 	if (fail)
 		goto err;
+	if (peer->advanced_security) {
+		fail = nla_put_flag(skb, WGPEER_A_ADVANCED_SECURITY);
+		if (fail)
+			goto err;
+		if (peer->ranged_headers &&
+		    nla_put_flag(skb, WGPEER_A_RANGED_HEADERS))
+			goto err;
+		if (peer->junk_offsets &&
+		    nla_put_flag(skb, WGPEER_A_JUNK_OFFSETS))
+			goto err;
+		if (nla_put_u8(skb, WGPEER_A_HEADER_PROTECTION,
+			       peer->header_protection) ||
+		    nla_put_u8(skb, WGPEER_A_RANDOM_TRAILERS,
+			       peer->random_trailers) ||
+		    nla_put_u8(skb, WGPEER_A_CONTENT_PADDING_ADDITION_ENABLED,
+			       peer->content_padding_addition))
+			goto err;
+	}
 
 	down_read(&peer->handshake.lock);
 	fail = nla_put(skb, WGPEER_A_PUBLIC_KEY, NOISE_PUBLIC_KEY_LEN,
@@ -735,6 +758,30 @@ static int set_peer(struct wg_device *wg, struct nlattr **attrs)
 			wg_packet_send_keepalive(peer);
 	}
 
+	/* Older userspace only provides ADVANCED_SECURITY. AWG 3.x features are
+	 * opt-in per peer; omitting these attributes keeps the connection on the
+	 * legacy-compatible path. Missing optional attributes are not errors.
+	 */
+	if (flags & WGPEER_F_HAS_ADVANCED_SECURITY) {
+		peer->advanced_security = !!attrs[WGPEER_A_ADVANCED_SECURITY];
+		peer->ranged_headers = peer->advanced_security &&
+			!!attrs[WGPEER_A_RANGED_HEADERS];
+		peer->junk_offsets = peer->advanced_security &&
+			(attrs[WGPEER_A_JUNK_OFFSETS] || wg->cookie_padding ||
+			 wg->transport_padding);
+		peer->header_protection = peer->advanced_security &&
+			wg->header_protection.has_protection &&
+			attrs[WGPEER_A_HEADER_PROTECTION] &&
+			nla_get_u8(attrs[WGPEER_A_HEADER_PROTECTION]);
+		peer->random_trailers = peer->advanced_security &&
+			wg->random_trailers && attrs[WGPEER_A_RANDOM_TRAILERS] &&
+			nla_get_u8(attrs[WGPEER_A_RANDOM_TRAILERS]);
+		peer->content_padding_addition = peer->advanced_security &&
+			!u16_range_is_zero(wg->content_padding_addition) &&
+			attrs[WGPEER_A_CONTENT_PADDING_ADDITION_ENABLED] &&
+			nla_get_u8(attrs[WGPEER_A_CONTENT_PADDING_ADDITION_ENABLED]);
+	}
+
 	if (netif_running(wg->dev))
 		wg_packet_send_staged_packets(peer);
 
@@ -1139,7 +1186,9 @@ void __exit wg_genetlink_uninit(void)
 }
 
 int wg_genl_mcast_peer_unknown(struct wg_device *wg, const u8 pubkey[NOISE_PUBLIC_KEY_LEN],
-	                           struct endpoint *endpoint)
+			       struct endpoint *endpoint, bool advanced_security,
+			       bool ranged_headers, bool junk_offsets,
+			       bool header_protection, bool random_trailers)
 {
 	struct sk_buff *skb;
 	struct nlattr *peer_nest;
@@ -1180,9 +1229,20 @@ int wg_genl_mcast_peer_unknown(struct wg_device *wg, const u8 pubkey[NOISE_PUBLI
 	if (ret)
 		goto err;
 
-	ret = nla_put_flag(skb, WGPEER_A_ADVANCED_SECURITY);
-	if (ret)
-		goto err;
+	if (advanced_security) {
+		ret = nla_put_flag(skb, WGPEER_A_ADVANCED_SECURITY);
+		if (ret)
+			goto err;
+		if (ranged_headers && nla_put_flag(skb, WGPEER_A_RANGED_HEADERS))
+			goto err;
+		if (junk_offsets && nla_put_flag(skb, WGPEER_A_JUNK_OFFSETS))
+			goto err;
+		if (nla_put_u8(skb, WGPEER_A_HEADER_PROTECTION, header_protection) ||
+		    nla_put_u8(skb, WGPEER_A_RANDOM_TRAILERS, random_trailers)) {
+			ret = -EMSGSIZE;
+			goto err;
+		}
+	}
 
 	nla_nest_end(skb, peer_nest);
 
