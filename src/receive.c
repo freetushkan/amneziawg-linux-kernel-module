@@ -239,7 +239,8 @@ static int prepare_skb_header(struct sk_buff *skb, struct wg_device *wg)
 			wireguard_type = MESSAGE_DATA;
 			break;
 		}
-		PACKET_CB(skb)->advanced_security = header_type != wireguard_type;
+		PACKET_CB(skb)->advanced_security = header_type != wireguard_type ||
+			protected || padding || had_random_trailers;
 		PACKET_CB(skb)->ranged_headers = PACKET_CB(skb)->advanced_security &&
 			header_type != u32_range_lo(header_range);
 		PACKET_CB(skb)->header_protection = protected;
@@ -252,7 +253,7 @@ static int prepare_skb_header(struct sk_buff *skb, struct wg_device *wg)
 				padding && padding == wg->transport_padding;
 		else
 			PACKET_CB(skb)->junk_offsets = PACKET_CB(skb)->advanced_security &&
-				(wg->cookie_padding || wg->transport_padding);
+				protected;
 	}
 
 	return 0;
@@ -268,14 +269,29 @@ static void wg_peer_update_compatibility(struct wg_peer *peer,
 		peer->header_protection = false;
 		peer->random_trailers = false;
 		peer->content_padding_addition = false;
+		peer->content_padding_addition_known = true;
+		peer->compatibility_known = true;
+		peer->compatibility_probe_stage = 0;
 		return;
 	}
 
 	peer->advanced_security = true;
+	peer->compatibility_known = true;
+	peer->compatibility_probe_stage = 0;
 	peer->ranged_headers = PACKET_CB(skb)->ranged_headers;
 	peer->header_protection = PACKET_CB(skb)->header_protection;
-	if (handshake && PACKET_CB(skb)->random_trailers)
-		peer->random_trailers = true;
+	if (handshake)
+		peer->random_trailers = PACKET_CB(skb)->random_trailers;
+
+	/* INIT/RESPONSE packets do not carry S3/S4, so keep the current
+	 * preference until a cookie or authenticated transport packet reveals it.
+	 * Header Protection, however, requires the S1-S4 nonce prefixes.
+	 */
+	if (PACKET_CB(skb)->type == MESSAGE_HANDSHAKE_COOKIE ||
+	    PACKET_CB(skb)->type == MESSAGE_DATA)
+		peer->junk_offsets = PACKET_CB(skb)->junk_offsets;
+	else if (PACKET_CB(skb)->header_protection)
+		peer->junk_offsets = true;
 }
 
 static void wg_receive_handshake_packet(struct wg_device *wg,
@@ -293,8 +309,16 @@ static void wg_receive_handshake_packet(struct wg_device *wg,
 	if (PACKET_CB(skb)->type == MESSAGE_HANDSHAKE_COOKIE) {
 		net_dbg_skb_ratelimited("%s: Receiving cookie response from %pISpfsc\n",
 					wg->dev->name, skb);
-		wg_cookie_message_consume(
-			(struct message_handshake_cookie *)skb->data, wg);
+		if (wg_cookie_message_consume(
+			(struct message_handshake_cookie *)skb->data, wg) &&
+		    wg_index_hashtable_lookup(wg->index_hashtable,
+				INDEX_HASHTABLE_HANDSHAKE | INDEX_HASHTABLE_KEYPAIR,
+				((struct message_handshake_cookie *)skb->data)->receiver_index,
+				&peer)) {
+			wg_peer_update_compatibility(peer, skb, true);
+			wg_peer_put(peer);
+			peer = NULL;
+		}
 		return;
 	}
 
@@ -542,6 +566,10 @@ static void wg_packet_consume_data_done(struct wg_peer *peer,
 	u8 buf, *p = skb_header_pointer(skb, 0, 1, &buf);
 
 	wg_socket_set_peer_endpoint(peer, endpoint);
+	/* This packet has passed AEAD authentication; do not learn a peer mode
+	 * from an unauthenticated transport header.
+	 */
+	wg_peer_update_compatibility(peer, skb, false);
 
 	if (unlikely(wg_noise_received_with_keypair(&peer->keypairs,
 						    PACKET_CB(skb)->keypair))) {
@@ -603,6 +631,19 @@ static void wg_packet_consume_data_done(struct wg_peer *peer,
 	if (unlikely(len > skb->len))
 		goto dishonest_packet_size;
 	len_before_trim = skb->len;
+	/* ContentPaddingAddition affects encrypted payload padding, not the
+	 * handshake. It can only be inferred after successful decryption and
+	 * parsing of a real inner IP packet. A positive excess over WireGuard's
+	 * normal 16-byte padding is sufficient evidence; a zero-sized addition
+	 * cannot be distinguished from vanilla padding in a single packet.
+	 */
+	if (peer->advanced_security &&
+	    (!peer->random_trailers ||
+	     !u16_range_is_zero(peer->device->content_padding_addition)) &&
+	    len_before_trim > ALIGN(len, MESSAGE_PADDING_MULTIPLE)) {
+		WRITE_ONCE(peer->content_padding_addition, true);
+		WRITE_ONCE(peer->content_padding_addition_known, true);
+	}
 	if (unlikely(pskb_trim(skb, len)))
 		goto packet_processed;
 
@@ -745,22 +786,7 @@ static void wg_packet_consume_data(struct wg_device *wg, struct sk_buff *skb)
 	if (unlikely(READ_ONCE(peer->is_dead)))
 		goto err;
 
-	if (!PACKET_CB(skb)->advanced_security) {
-		peer->advanced_security = false;
-		peer->ranged_headers = false;
-		peer->junk_offsets = false;
-		peer->header_protection = false;
-		peer->random_trailers = false;
-		peer->content_padding_addition = false;
-	} else {
-		peer->advanced_security = true;
-		peer->ranged_headers = PACKET_CB(skb)->ranged_headers;
-		peer->header_protection = PACKET_CB(skb)->header_protection;
-		if (PACKET_CB(skb)->junk_offsets)
-			peer->junk_offsets = true;
-		else if (skb->len > MESSAGE_MINIMUM_LENGTH)
-			peer->junk_offsets = false;
-	}
+	/* Compatibility is updated only after successful packet decryption. */
 
 	ret = wg_queue_enqueue_per_device_and_peer(&wg->decrypt_queue, &peer->rx_queue, skb,
 						   wg->packet_crypt_wq);

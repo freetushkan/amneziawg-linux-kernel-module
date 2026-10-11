@@ -312,15 +312,20 @@ get_peer(struct wg_peer *peer, struct sk_buff *skb, struct dump_ctx *ctx)
 		if (fail)
 			goto err;
 		if (peer->ranged_headers &&
+		    (!peer->compatibility_auto || peer->compatibility_known) &&
 		    nla_put_flag(skb, WGPEER_A_RANGED_HEADERS))
 			goto err;
 		if (peer->junk_offsets &&
+		    (!peer->compatibility_auto || peer->compatibility_known) &&
 		    nla_put_flag(skb, WGPEER_A_JUNK_OFFSETS))
 			goto err;
-		if (nla_put_u8(skb, WGPEER_A_HEADER_PROTECTION,
-			       peer->header_protection) ||
-		    nla_put_u8(skb, WGPEER_A_RANDOM_TRAILERS,
-			       peer->random_trailers) ||
+		if ((!peer->compatibility_auto || peer->compatibility_known) &&
+		    (nla_put_u8(skb, WGPEER_A_HEADER_PROTECTION,
+				peer->header_protection) ||
+		     nla_put_u8(skb, WGPEER_A_RANDOM_TRAILERS,
+				peer->random_trailers)))
+			goto err;
+		if (peer->content_padding_addition_known &&
 		    nla_put_u8(skb, WGPEER_A_CONTENT_PADDING_ADDITION_ENABLED,
 			       peer->content_padding_addition))
 			goto err;
@@ -758,28 +763,46 @@ static int set_peer(struct wg_device *wg, struct nlattr **attrs)
 			wg_packet_send_keepalive(peer);
 	}
 
-	/* Older userspace only provides ADVANCED_SECURITY. AWG 3.x features are
-	 * opt-in per peer; omitting these attributes keeps the connection on the
-	 * legacy-compatible path. Missing optional attributes are not errors.
+	/* Feature attributes are optional. If userspace omits them, probe using
+	 * the locally configured AWG profile and learn the peer's actual mode from
+	 * its handshake/data packets.
 	 */
 	if (flags & WGPEER_F_HAS_ADVANCED_SECURITY) {
-		peer->advanced_security = !!attrs[WGPEER_A_ADVANCED_SECURITY];
-		peer->ranged_headers = peer->advanced_security &&
-			!!attrs[WGPEER_A_RANGED_HEADERS];
-		peer->junk_offsets = peer->advanced_security &&
-			(attrs[WGPEER_A_JUNK_OFFSETS] || wg->cookie_padding ||
-			 wg->transport_padding);
-		peer->header_protection = peer->advanced_security &&
-			wg->header_protection.has_protection &&
-			attrs[WGPEER_A_HEADER_PROTECTION] &&
-			nla_get_u8(attrs[WGPEER_A_HEADER_PROTECTION]);
-		peer->random_trailers = peer->advanced_security &&
-			wg->random_trailers && attrs[WGPEER_A_RANDOM_TRAILERS] &&
-			nla_get_u8(attrs[WGPEER_A_RANDOM_TRAILERS]);
-		peer->content_padding_addition = peer->advanced_security &&
-			!u16_range_is_zero(wg->content_padding_addition) &&
-			attrs[WGPEER_A_CONTENT_PADDING_ADDITION_ENABLED] &&
-			nla_get_u8(attrs[WGPEER_A_CONTENT_PADDING_ADDITION_ENABLED]);
+		/* Older userspace uses HAS_ADVANCED_SECURITY to update the initial
+		 * preference. An absent attribute prefers WireGuard first, but
+		 * automatic probing remains enabled until a peer is learned.
+		 */
+		peer->compatibility_prefer_awg =
+			!!attrs[WGPEER_A_ADVANCED_SECURITY];
+		if (!peer->compatibility_known && peer->compatibility_auto)
+			wg_peer_compatibility_set_local_defaults(peer);
+
+		if (attrs[WGPEER_A_ADVANCED_SECURITY])
+			peer->advanced_security = true;
+
+		if (attrs[WGPEER_A_RANGED_HEADERS] || attrs[WGPEER_A_JUNK_OFFSETS] ||
+		    attrs[WGPEER_A_HEADER_PROTECTION] ||
+		    attrs[WGPEER_A_RANDOM_TRAILERS] ||
+		    attrs[WGPEER_A_CONTENT_PADDING_ADDITION_ENABLED]) {
+			peer->compatibility_auto = false;
+			peer->compatibility_prefer_awg = true;
+			peer->advanced_security = true;
+		}
+		if (attrs[WGPEER_A_RANGED_HEADERS])
+			peer->ranged_headers = peer->advanced_security;
+		if (attrs[WGPEER_A_JUNK_OFFSETS])
+			peer->junk_offsets = peer->advanced_security;
+		if (attrs[WGPEER_A_HEADER_PROTECTION])
+			peer->header_protection = peer->advanced_security &&
+				nla_get_u8(attrs[WGPEER_A_HEADER_PROTECTION]);
+		if (attrs[WGPEER_A_RANDOM_TRAILERS])
+			peer->random_trailers = peer->advanced_security &&
+				nla_get_u8(attrs[WGPEER_A_RANDOM_TRAILERS]);
+		if (attrs[WGPEER_A_CONTENT_PADDING_ADDITION_ENABLED]) {
+			peer->content_padding_addition = peer->advanced_security &&
+				nla_get_u8(attrs[WGPEER_A_CONTENT_PADDING_ADDITION_ENABLED]);
+			peer->content_padding_addition_known = true;
+		}
 	}
 
 	if (netif_running(wg->dev))

@@ -38,6 +38,9 @@ struct wg_peer *wg_peer_create(struct wg_device *wg,
 	WRITE_ONCE(peer->udp_window, DEFAULT_UDP_WINDOW);
 
 	peer->device = wg;
+	peer->compatibility_auto = true;
+	peer->compatibility_prefer_awg = wg_device_has_awg_config(wg);
+	wg_peer_compatibility_set_local_defaults(peer);
 	wg_noise_handshake_init(&peer->handshake, &wg->static_identity,
 				public_key, preshared_key, peer);
 	peer->internal_id = atomic64_inc_return(&peer_counter);

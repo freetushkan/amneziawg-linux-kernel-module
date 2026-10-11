@@ -195,18 +195,18 @@ void wg_cookie_message_create(struct message_handshake_cookie *dst,
 				  checker->cookie_encryption_key);
 }
 
-void wg_cookie_message_consume(struct message_handshake_cookie *src,
+bool wg_cookie_message_consume(struct message_handshake_cookie *src,
 			       struct wg_device *wg)
 {
 	struct wg_peer *peer = NULL;
 	u8 cookie[COOKIE_LEN];
-	bool ret;
+	bool ret = false;
 
 	if (unlikely(!wg_index_hashtable_lookup(wg->index_hashtable,
 						INDEX_HASHTABLE_HANDSHAKE |
 						INDEX_HASHTABLE_KEYPAIR,
 						src->receiver_index, &peer)))
-		return;
+		return false;
 
 	down_read(&peer->latest_cookie.lock);
 	if (unlikely(!peer->latest_cookie.have_sent_mac1)) {
@@ -233,4 +233,5 @@ void wg_cookie_message_consume(struct message_handshake_cookie *src,
 
 out:
 	wg_peer_put(peer);
+	return ret;
 }

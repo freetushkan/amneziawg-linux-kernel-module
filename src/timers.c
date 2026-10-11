@@ -66,6 +66,45 @@ static void wg_expired_retransmit_handshake(struct timer_list *timer)
 				       jiffies + timeout * 3 * HZ);
 	} else {
 		++peer->timer_handshake_attempts;
+		/* A peer that has never completed a handshake may be older than
+		 * the local configuration. First retry with fixed AWG headers and
+		 * without AWG 3.x packet-shape features, then try vanilla WireGuard.
+		 * Once a valid peer handshake/data packet is observed, never downgrade
+		 * that learned mode because of a later transient timeout.
+		 */
+		if (!peer->compatibility_known && peer->compatibility_auto) {
+			if (peer->compatibility_probe_stage == 0 &&
+			    peer->advanced_security) {
+				/* AWG range/3.x profile -> fixed-header AWG profile. */
+				peer->ranged_headers = false;
+				peer->junk_offsets = false;
+				peer->header_protection = false;
+				peer->random_trailers = false;
+				peer->content_padding_addition = false;
+				peer->compatibility_probe_stage = 1;
+			} else if (peer->compatibility_probe_stage == 0 &&
+				   !peer->advanced_security &&
+				   wg_device_has_awg_config(peer->device)) {
+				/* WireGuard first, then fixed-header AWG if no reply. */
+				peer->compatibility_prefer_awg = true;
+				wg_peer_compatibility_set_local_defaults(peer);
+				peer->ranged_headers = false;
+				peer->junk_offsets = false;
+				peer->header_protection = false;
+				peer->random_trailers = false;
+				peer->content_padding_addition = false;
+				peer->compatibility_probe_stage = 1;
+			} else if (peer->compatibility_probe_stage == 1) {
+				/* Fixed AWG profile -> vanilla WireGuard. */
+				peer->advanced_security = false;
+				peer->ranged_headers = false;
+				peer->junk_offsets = false;
+				peer->header_protection = false;
+				peer->random_trailers = false;
+				peer->content_padding_addition = false;
+				peer->compatibility_probe_stage = 2;
+			}
+		}
 		pr_debug("%s: Handshake for peer %llu (%pISpfsc) did not complete after %d seconds, retrying (try %d)\n",
 			 peer->device->dev->name, peer->internal_id,
 			 &peer->endpoint.addr, (int)REKEY_TIMEOUT,

@@ -111,6 +111,11 @@ void wg_packet_send_queued_handshake_initiation(struct wg_peer *peer,
 	u16 min_timeout = !u16_range_is_zero(peer->device->rekey_timeout) ?
 		u16_range_lo(peer->device->rekey_timeout) : REKEY_TIMEOUT;
 
+	if (!is_retry && !peer->compatibility_known && peer->compatibility_auto) {
+		wg_peer_compatibility_set_local_defaults(peer);
+		peer->compatibility_probe_stage = 0;
+	}
+
 	if (!is_retry) {
 		peer->timer_handshake_attempts = 0;
 		peer->max_handshake_attempts = !u16_range_is_zero(peer->device->max_handshake_attempts) ? u16_range_pick_one(peer->device->max_handshake_attempts) : MAX_TIMER_HANDSHAKES;

@@ -76,6 +76,11 @@ struct wg_peer {
 	bool header_protection;
 	bool random_trailers;
 	bool content_padding_addition;
+	bool content_padding_addition_known;
+	bool compatibility_known;
+	bool compatibility_auto;
+	bool compatibility_prefer_awg;
+	u8 compatibility_probe_stage;
 };
 
 /* Select the on-wire header without making newer AWG features mandatory. */
@@ -85,6 +90,70 @@ static inline u32 wg_compat_header(bool advanced_security, bool ranged_headers,
 	if (!advanced_security)
 		return wireguard_type;
 	return ranged_headers ? u32_range_pick_one(range) : u32_range_lo(range);
+}
+
+/* Detect whether the device's current configuration can send AWG packets.
+ * The default ranges are exactly the vanilla WireGuard message type values.
+ */
+static inline bool wg_device_has_awg_config(const struct wg_device *wg)
+{
+	int i;
+
+	if (u32_range_lo(wg->init_header) != MESSAGE_HANDSHAKE_INITIATION ||
+	    u32_range_hi(wg->init_header) != MESSAGE_HANDSHAKE_INITIATION ||
+	    u32_range_lo(wg->resp_header) != MESSAGE_HANDSHAKE_RESPONSE ||
+	    u32_range_hi(wg->resp_header) != MESSAGE_HANDSHAKE_RESPONSE ||
+	    u32_range_lo(wg->cookie_header) != MESSAGE_HANDSHAKE_COOKIE ||
+	    u32_range_hi(wg->cookie_header) != MESSAGE_HANDSHAKE_COOKIE ||
+	    u32_range_lo(wg->transport_header) != MESSAGE_DATA ||
+	    u32_range_hi(wg->transport_header) != MESSAGE_DATA ||
+	    wg->init_padding || wg->resp_padding || wg->cookie_padding ||
+	    wg->transport_padding || wg->jc || wg->jmin || wg->jmax ||
+	    wg->header_protection.has_protection || wg->random_trailers ||
+	    !u16_range_is_zero(wg->content_padding_addition) ||
+	    !u16_range_is_zero(wg->rekey_after_time) ||
+	    !u16_range_is_zero(wg->rekey_timeout) ||
+	    !u16_range_is_zero(wg->reject_after_time) ||
+	    !u16_range_is_zero(wg->keepalive_timeout) ||
+	    !u16_range_is_zero(wg->max_handshake_attempts) ||
+	    wg->disable_cookies)
+		return true;
+
+	for (i = 0; i < ARRAY_SIZE(wg->ispecs); ++i) {
+		if (wg->ispecs[i].pkt_size)
+			return true;
+	}
+	return false;
+}
+
+static inline bool wg_device_uses_ranged_headers(const struct wg_device *wg)
+{
+	return u32_range_lo(wg->init_header) != u32_range_hi(wg->init_header) ||
+	       u32_range_lo(wg->resp_header) != u32_range_hi(wg->resp_header) ||
+	       u32_range_lo(wg->cookie_header) != u32_range_hi(wg->cookie_header) ||
+	       u32_range_lo(wg->transport_header) != u32_range_hi(wg->transport_header);
+}
+
+/* Set the best locally available profile for a fresh automatic probe. */
+static inline void wg_peer_compatibility_set_local_defaults(struct wg_peer *peer)
+{
+	struct wg_device *wg = peer->device;
+	bool awg = peer->compatibility_prefer_awg;
+
+	peer->advanced_security = awg;
+	peer->ranged_headers = awg && wg_device_uses_ranged_headers(wg);
+	/* S3/S4 are absent from INIT/RESPONSE. Do not assume the peer has
+	 * them until a cookie/transport packet reveals the offsets. Header
+	 * Protection detection below can enable them when required.
+	 */
+	peer->junk_offsets = false;
+	peer->header_protection = awg && wg->header_protection.has_protection;
+	peer->random_trailers = awg && wg->random_trailers;
+	/* ContentPaddingAddition is only enabled after observing extra encrypted
+	 * payload padding from this peer, unless userspace explicitly overrides it.
+	 */
+	peer->content_padding_addition = false;
+	peer->content_padding_addition_known = false;
 }
 
 struct wg_peer *wg_peer_create(struct wg_device *wg,
