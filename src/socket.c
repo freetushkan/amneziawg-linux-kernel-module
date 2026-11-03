@@ -395,7 +395,11 @@ retry:
 		goto out;
 	}
 	set_sock_opts(new4);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(7, 0, 0)
+	setup_udp_tunnel_sock(net, new4->sk, &cfg);
+#else
 	setup_udp_tunnel_sock(net, new4, &cfg);
+#endif
 
 #if IS_ENABLED(CONFIG_IPV6)
 	if (ipv6_mod_enabled()) {
@@ -410,7 +414,11 @@ retry:
 			goto out;
 		}
 		set_sock_opts(new6);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(7, 0, 0)
+		setup_udp_tunnel_sock(net, new6->sk, &cfg);
+#else
 		setup_udp_tunnel_sock(net, new6, &cfg);
+#endif
 	}
 #endif
 
