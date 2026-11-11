@@ -242,8 +242,9 @@ static bool encrypt_packet(struct sk_buff *skb, struct noise_keypair *keypair
 	unsigned int udp_window;
 	int padding;
 	u16_range_t content_padding_addition;
+	u8 lacks = awg_peer_lacks(peer);
 
-	padding = peer->device->transport_padding;
+	padding = awg_padding_s34(lacks, peer->device->transport_padding);
 	content_padding_addition = peer->device->content_padding_addition;
 
 	udp_window = padding + MESSAGE_MINIMUM_LENGTH + skb->len;
@@ -257,9 +258,9 @@ static bool encrypt_packet(struct sk_buff *skb, struct noise_keypair *keypair
 
 	/* Calculate lengths. */
 	packet_len = skb->len + MESSAGE_MINIMUM_LENGTH + padding;
-	if (!u16_range_is_zero(content_padding_addition)) {
+	if (!u16_range_is_zero(content_padding_addition) && awg_has_v3(lacks)) {
 		padding_len = wg_peer_skb_randomize_padding_addition(peer, peer->device, packet_len);
-	} else if (peer->device->random_trailers) {
+	} else if (peer->device->random_trailers && awg_has_v3(lacks)) {
 		padding_len = wg_peer_skb_random_trailer(peer, peer->device, packet_len);
 	} else {
 		padding_len = calculate_skb_padding(skb);
@@ -295,7 +296,7 @@ static bool encrypt_packet(struct sk_buff *skb, struct noise_keypair *keypair
 	skb_set_inner_network_header(skb, 0);
 	header = (struct message_data *)skb_push(skb, sizeof(*header));
 	header->header.type = cpu_to_le32(
-		u32_range_pick_one(peer->device->transport_header));
+		awg_header(lacks, peer->device->transport_header, MESSAGE_DATA));
 	header->key_idx = keypair->remote_index;
 	header->counter = cpu_to_le64(PACKET_CB(skb)->nonce);
 	pskb_put(skb, trailer, trailer_len);
@@ -303,7 +304,8 @@ static bool encrypt_packet(struct sk_buff *skb, struct noise_keypair *keypair
 	crypto = skb_push(skb, padding);
 	get_random_bytes(crypto, padding);
 
-	if (awg_header_protection_init(&state, peer->device, crypto))
+	if (padding && awg_has_hp(lacks) &&
+	    awg_header_protection_init(&state, peer->device, crypto))
 		chacha20_crypt(&state, (u8*)header, (u8*)header, sizeof(*header));
 
 	/* Now we can encrypt the scattergather segments */
