@@ -425,18 +425,111 @@ static void awg_log(const struct wg_peer *peer, u8 f)
 			     &peer->endpoint.addr, proto, extra);
 }
 
+/*
+ * Two hosts running this code would otherwise learn from each other's
+ * degraded packets: one probes the other in an older format, the other
+ * concludes the prober lacks those features and answers in that format, and
+ * both stay there. So both announce what their own configuration lacks in
+ * the first 4 bytes of the S1/S2 padding of handshake messages:
+ *
+ *   tag = BLAKE2s-32(key = receiver's mac1 key, handshake message)
+ *   padding[0..2] = tag[0..2]
+ *   padding[3] = tag[3] ^ (AWG_MARK_VERSION << 5 | lacks)
+ *
+ * To anyone without the receiver's public key these are random bytes, as
+ * padding is supposed to be; older implementations ignore them.
+ */
+#define AWG_MARK_VERSION 1
+#define AWG_MARK_LEN 4
+
+static u8 awg_device_lacks(const struct wg_device *wg)
+{
+	u8 lacks = 0;
+
+	if (!wg->header_protection.has_protection)
+		lacks |= AWG_LACK_HP;
+	if (!wg->random_trailers)
+		lacks |= AWG_LACK_V3;
+	if (!wg->cookie_padding && !wg->transport_padding)
+		lacks |= AWG_LACK_S34;
+	if (u32_range_lo(wg->init_header) == u32_range_hi(wg->init_header) &&
+	    u32_range_lo(wg->resp_header) == u32_range_hi(wg->resp_header) &&
+	    u32_range_lo(wg->cookie_header) == u32_range_hi(wg->cookie_header) &&
+	    u32_range_lo(wg->transport_header) == u32_range_hi(wg->transport_header))
+		lacks |= AWG_LACK_RANGE;
+	return lacks;
+}
+
+void awg_compat_mark(struct wg_peer *peer, u8 *padding, size_t padding_len,
+		     const void *msg, size_t len)
+{
+	u8 tag[AWG_MARK_LEN];
+
+	if (!READ_ONCE(awg_compat_mode) || padding_len < AWG_MARK_LEN)
+		return;
+	down_read(&peer->latest_cookie.lock);
+	blake2s(peer->latest_cookie.message_mac1_key, NOISE_SYMMETRIC_KEY_LEN,
+		msg, len, tag, sizeof(tag));
+	up_read(&peer->latest_cookie.lock);
+	memcpy(padding, tag, AWG_MARK_LEN - 1);
+	padding[AWG_MARK_LEN - 1] = tag[AWG_MARK_LEN - 1] ^
+		(AWG_MARK_VERSION << 5 | awg_device_lacks(peer->device));
+}
+
+/* Called on a handshake message that was consumed successfully: skb->data
+ * holds the plaintext message, the padding is right in front of it.
+ */
+static bool awg_read_mark(const struct wg_device *wg,
+			  const struct sk_buff *skb, u8 *lacks)
+{
+	const u8 *p = skb->data - PACKET_CB(skb)->padding;
+	u8 tag[AWG_MARK_LEN], v;
+
+	if (PACKET_CB(skb)->padding < AWG_MARK_LEN || p < skb->head)
+		return false;
+	blake2s(wg->cookie_checker.message_mac1_key, NOISE_SYMMETRIC_KEY_LEN,
+		skb->data, skb->len, tag, sizeof(tag));
+	if (crypto_memneq(p, tag, AWG_MARK_LEN - 1))
+		return false;
+	v = p[AWG_MARK_LEN - 1] ^ tag[AWG_MARK_LEN - 1];
+	if (v >> 5 != AWG_MARK_VERSION)
+		return false;
+	*lacks = v & AWG_LACK_ALL;
+	return true;
+}
+
 void awg_compat_learn(struct wg_peer *peer, const struct sk_buff *skb)
 {
 	u8 known = PACKET_CB(skb)->awg_known;
 	u8 lacks = PACKET_CB(skb)->awg_lacks & known;
-	u8 old = READ_ONCE(peer->awg_compat), new;
+	u8 old = READ_ONCE(peer->awg_compat), base, new, mark;
+	bool handshake = PACKET_CB(skb)->type != MESSAGE_DATA;
 
 	BUILD_BUG_ON(sizeof(struct packet_cb) > sizeof_field(struct sk_buff, cb));
 
-	new = (old & ~known) | lacks | AWG_STATE_LEARNED;
+	if (!known)	/* compat off */
+		return;
+	if (handshake && !(lacks & AWG_LACK_AWG) &&
+	    awg_read_mark(peer->device, skb, &mark)) {
+		/* The peer told us what it lacks: trust that over the shape
+		 * of its packets, which reflects what it believes of us.
+		 */
+		new = mark | AWG_STATE_S34_SEEN | AWG_STATE_LEARNED |
+		      AWG_STATE_MARKED;
+		goto update;
+	}
+	base = old;
+	if (old & AWG_STATE_MARKED) {
+		if (!handshake)
+			return;
+		/* Unmarked handshake: the key is now used by something else. */
+		base = 0;
+	}
+
+	new = (base & ~known) | lacks | AWG_STATE_LEARNED;
 	if (known & AWG_LACK_S34) {
 		new |= AWG_STATE_S34_SEEN;
-	} else if (!(old & (AWG_STATE_S34_SEEN | AWG_STATE_LEARNED)) &&
+	} else if (!(base & (AWG_STATE_S34_SEEN | AWG_STATE_LEARNED)) &&
 		   (known & AWG_LACK_RANGE)) {
 		/* Until a transport packet shows it, guess S3/S4 from the
 		 * header kind: fixed headers mean AWG 1.x without S3/S4.
@@ -447,6 +540,7 @@ void awg_compat_learn(struct wg_peer *peer, const struct sk_buff *skb)
 		if (lacks & AWG_LACK_RANGE)
 			new |= AWG_LACK_S34;
 	}
+update:
 	if (likely(new == old))
 		return;
 

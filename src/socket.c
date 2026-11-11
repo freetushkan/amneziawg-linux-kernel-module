@@ -216,6 +216,9 @@ int wg_socket_send_buffer_to_peer(struct wg_peer *peer, void *buffer,
 	if (trailer_len)
 		get_random_bytes(skb_put(skb, trailer_len), trailer_len);
 
+	if (crypto)
+		awg_compat_mark(peer, crypto, padding, buffer, len);
+
 	if (crypto && awg_has_hp(awg_peer_lacks(peer)) &&
 			awg_header_protection_init(&state, peer->device, crypto))
 		chacha20_crypt(&state, buffer, buffer, len);

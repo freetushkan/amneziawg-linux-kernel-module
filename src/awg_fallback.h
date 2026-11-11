@@ -37,7 +37,8 @@ enum awg_lack {
 
 enum awg_peer_state {
 	AWG_STATE_S34_SEEN = 1U << 5, /* AWG_LACK_S34 observed, not guessed */
-	AWG_STATE_LEARNED  = 1U << 6  /* mask learned from authenticated packet */
+	AWG_STATE_LEARNED  = 1U << 6, /* mask learned from authenticated packet */
+	AWG_STATE_MARKED   = 1U << 7  /* mask announced by the peer itself */
 };
 
 enum awg_compat_mode {
@@ -135,5 +136,12 @@ static inline u8 awg_skb_toggle(const struct sk_buff *skb)
 {
 	return PACKET_CB(skb)->is_keepalive ? PACKET_CB(skb)->awg_lacks : 0;
 }
+
+/* Announce what our device configuration lacks in the first bytes of the
+ * S1/S2 padding of an outgoing handshake message (plaintext, before header
+ * protection is applied).
+ */
+void awg_compat_mark(struct wg_peer *peer, u8 *padding, size_t padding_len,
+		     const void *msg, size_t len);
 
 #endif /* _AWG_FALLBACK_H */
