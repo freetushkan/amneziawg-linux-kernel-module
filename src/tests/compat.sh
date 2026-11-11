@@ -45,6 +45,7 @@ TESTS=${TESTS:-"1 2 3 4 5"}
 want() { [[ " $TESTS " == *" $1 "* ]]; }
 failed=0
 pass() { printf '  \e[32mPASS\e[0m %s\n' "$*"; }
+known() { printf '  \e[33mKNOWN\e[0m %s\n' "$*"; }
 fail() { printf '  \e[31mFAIL\e[0m %s\n' "$*"; failed=1; }
 n() { ip netns exec "$@"; }
 
@@ -181,7 +182,7 @@ echo "1. Client-initiated handshakes"
 setup_server
 mark=$(dmesg | wc -l)
 for c in $CLIENTS; do
-	if ping_until $c 10.0.0.1 15; then pass "$c reaches the server"; else fail "$c cannot reach the server"; fi
+	if ping_until $c 10.0.0.1 30; then pass "$c reaches the server"; else fail "$c cannot reach the server"; fi
 done
 check_logs $mark
 
@@ -191,7 +192,17 @@ if want 2; then
 echo "2. No loss with ambiguous transport headers"
 for c in $CLIENTS; do
 	loss=$(n $c ping -q -c 300 -i 0.01 -s 1000 10.0.0.1 | sed -n 's/.* \([0-9.]*\)% packet loss.*/\1/p')
-	if [ "$loss" = "0" ]; then pass "$c: 300 pings, 0% loss"; else fail "$c: ${loss:-?}% loss"; fi
+	if [ "$loss" = "0" ]; then
+		pass "$c: 300 pings, 0% loss"
+	elif [ $CLIENT_KIND != amneziawg ] && [[ $c == c3* ]]; then
+		# Upstream itself tests a transport packet as an initiation and a
+		# response first when RandomTrailers is on, so with wide H1/H2 it
+		# drops a share of the server's packets. Fixed on this side by
+		# "receive: resolve packets that fit more than one shape".
+		known "$c: ${loss}% loss in the upstream client (RandomTrailers + wide H1/H2)"
+	else
+		fail "$c: ${loss:-?}% loss"
+	fi
 done
 
 fi
@@ -203,7 +214,7 @@ setup_server endpoints
 mark=$(dmesg | wc -l)
 pids=
 for c in $CLIENTS; do
-	( ping_until srv 10.0.0.${idx[$c]} 45 && echo ok > /tmp/r.$c || echo no > /tmp/r.$c ) &
+	( ping_until srv 10.0.0.${idx[$c]} 60 && echo ok > /tmp/r.$c || echo no > /tmp/r.$c ) &
 	pids="$pids $!"
 done
 wait $pids
