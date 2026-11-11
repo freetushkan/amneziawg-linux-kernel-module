@@ -3,6 +3,7 @@
  * Copyright (C) 2015-2019 Jason A. Donenfeld <Jason@zx2c4.com>. All Rights Reserved.
  */
 
+#include "awg_fallback.h"
 #include "device.h"
 #include "header_protection.h"
 #include "peer.h"
@@ -215,7 +216,7 @@ int wg_socket_send_buffer_to_peer(struct wg_peer *peer, void *buffer,
 	if (trailer_len)
 		get_random_bytes(skb_put(skb, trailer_len), trailer_len);
 
-	if (crypto &&
+	if (crypto && awg_has_hp(awg_peer_lacks(peer)) &&
 			awg_header_protection_init(&state, peer->device, crypto))
 		chacha20_crypt(&state, buffer, buffer, len);
 
@@ -239,7 +240,9 @@ int wg_socket_send_buffer_as_reply_to_skb(struct wg_device *wg,
 	if (unlikely(ret < 0))
 		return ret;
 
-	trailer_len = wg_peer_skb_random_trailer(NULL, wg, padding + len);
+	trailer_len = awg_has_v3(awg_skb_lacks(in_skb))
+		? wg_peer_skb_random_trailer(NULL, wg, padding + len)
+		: 0;
 
 	skb = alloc_skb(padding + len + trailer_len + SKB_HEADER_LEN, GFP_ATOMIC);
 	if (unlikely(!skb))
@@ -257,7 +260,7 @@ int wg_socket_send_buffer_as_reply_to_skb(struct wg_device *wg,
 	if (trailer_len)
 		get_random_bytes(skb_put(skb, trailer_len), trailer_len);
 
-	if (crypto &&
+	if (crypto && awg_has_hp(awg_skb_lacks(in_skb)) &&
 			awg_header_protection_init(&state, wg, crypto))
 		chacha20_crypt(&state, buffer, buffer, len);
 

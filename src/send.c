@@ -3,6 +3,7 @@
  * Copyright (C) 2015-2019 Jason A. Donenfeld <Jason@zx2c4.com>. All Rights Reserved.
  */
 
+#include "awg_fallback.h"
 #include "header_protection.h"
 #include "junk.h"
 #include "queueing.h"
@@ -36,6 +37,7 @@ static void wg_packet_send_handshake_initiation(struct wg_peer *peer)
 	struct jp_spec* spec;
 	u16 min_timeout = !u16_range_is_zero(peer->device->rekey_timeout) ?
 		u16_range_lo(peer->device->rekey_timeout) : REKEY_TIMEOUT;
+	u8 lacks = awg_peer_lacks(peer);
 
 	if (!wg_birthdate_has_expired(atomic64_read(&peer->last_sent_handshake),
 				      min_timeout))
@@ -79,14 +81,15 @@ static void wg_packet_send_handshake_initiation(struct wg_peer *peer)
 	}
 
 	if (wg_noise_handshake_create_initiation(&packet, &peer->handshake,
-			u32_range_pick_one(wg->init_header))) {
+			awg_header(lacks, wg->init_header, MESSAGE_HANDSHAKE_INITIATION))) {
 		wg_cookie_add_mac_to_packet(&packet, sizeof(packet), peer);
 		wg_timers_any_authenticated_packet_traversal(peer);
 		wg_timers_any_authenticated_packet_sent(peer);
 		atomic64_set(&peer->last_sent_handshake,
 			     ktime_get_coarse_boottime_ns());
 		wg_socket_send_buffer_to_peer(peer, &packet, sizeof(packet),
-					      HANDSHAKE_DSCP, wg->init_padding, true);
+					      HANDSHAKE_DSCP, awg_padding(lacks, wg->init_padding),
+					      awg_has_v3(lacks));
 		wg_timers_handshake_initiated(peer);
 	}
 }
@@ -139,6 +142,7 @@ void wg_packet_send_handshake_response(struct wg_peer *peer)
 {
 	struct message_handshake_response packet;
 	struct wg_device *wg = peer->device;
+	u8 lacks = awg_peer_lacks(peer);
 
 	atomic64_set(&peer->last_sent_handshake, ktime_get_coarse_boottime_ns());
 	net_dbg_ratelimited("%s: Sending handshake response to peer %llu (%pISpfsc)\n",
@@ -146,7 +150,7 @@ void wg_packet_send_handshake_response(struct wg_peer *peer)
 			    &peer->endpoint.addr);
 
 	if (wg_noise_handshake_create_response(&packet, &peer->handshake,
-			u32_range_pick_one(wg->resp_header))) {
+			awg_header(lacks, wg->resp_header, MESSAGE_HANDSHAKE_RESPONSE))) {
 		wg_cookie_add_mac_to_packet(&packet, sizeof(packet), peer);
 		if (wg_noise_handshake_begin_session(&peer->handshake,
 						     &peer->keypairs)) {
@@ -158,7 +162,8 @@ void wg_packet_send_handshake_response(struct wg_peer *peer)
 			wg_socket_send_buffer_to_peer(peer, &packet,
 						      sizeof(packet),
 						      HANDSHAKE_DSCP,
-							  wg->resp_padding, true);
+							  awg_padding(lacks, wg->resp_padding),
+							  awg_has_v3(lacks));
 		}
 	}
 }
@@ -168,15 +173,16 @@ void wg_packet_send_handshake_cookie(struct wg_device *wg,
 				     __le32 sender_index)
 {
 	struct message_handshake_cookie packet;
+	u8 lacks = awg_skb_lacks(initiating_skb);
 
 	net_dbg_skb_ratelimited("%s: Sending cookie response for denied handshake message for %pISpfsc\n",
 				wg->dev->name, initiating_skb);
 	wg_cookie_message_create(&packet, initiating_skb, sender_index,
 				 &wg->cookie_checker,
-				 u32_range_pick_one(wg->cookie_header));
+				 awg_header(lacks, wg->cookie_header, MESSAGE_HANDSHAKE_COOKIE));
 	wg_socket_send_buffer_as_reply_to_skb(wg, initiating_skb, &packet,
 					      sizeof(packet),
-						  wg->cookie_padding);
+						  awg_padding_s34(lacks, wg->cookie_padding));
 }
 
 static int key_fresh_timeout(struct wg_peer *peer)
