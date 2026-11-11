@@ -117,4 +117,23 @@ size_t awg_compat_classify(struct sk_buff *skb, struct wg_device *wg,
  */
 void awg_compat_learn(struct wg_peer *peer, const struct sk_buff *skb);
 
+/* Timer hooks: our handshake initiation or our transport packets got no
+ * answer. Try another format if the peer's one is not known for sure.
+ */
+void awg_compat_handshake_unanswered(struct wg_peer *peer);
+void awg_compat_data_unanswered(struct wg_peer *peer);
+
+/* After a handshake we initiated: also confirm the session in the other S4
+ * format if the peer's is not known yet.
+ */
+void awg_compat_confirm_session(struct wg_peer *peer);
+
+/* Features to toggle for one outgoing packet. Only keepalives we allocate
+ * ourselves carry it: the cb of packets from the stack is not cleared.
+ */
+static inline u8 awg_skb_toggle(const struct sk_buff *skb)
+{
+	return PACKET_CB(skb)->is_keepalive ? PACKET_CB(skb)->awg_lacks : 0;
+}
+
 #endif /* _AWG_FALLBACK_H */

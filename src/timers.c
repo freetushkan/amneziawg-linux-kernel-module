@@ -3,6 +3,7 @@
  * Copyright (C) 2015-2019 Jason A. Donenfeld <Jason@zx2c4.com>. All Rights Reserved.
  */
 
+#include "awg_fallback.h"
 #include "timers.h"
 #include "device.h"
 #include "messages.h"
@@ -76,6 +77,7 @@ static void wg_expired_retransmit_handshake(struct timer_list *timer)
 		 */
 		wg_socket_clear_peer_endpoint_src(peer);
 
+		awg_compat_handshake_unanswered(peer);
 		wg_packet_send_queued_handshake_initiation(peer, true);
 	}
 }
@@ -107,6 +109,7 @@ static void wg_expired_new_handshake(struct timer_list *timer)
 	 * of trouble.
 	 */
 	wg_socket_clear_peer_endpoint_src(peer);
+	awg_compat_data_unanswered(peer);
 	wg_packet_send_queued_handshake_initiation(peer, false);
 }
 

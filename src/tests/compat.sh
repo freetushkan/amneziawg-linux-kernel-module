@@ -12,10 +12,16 @@
 #   c1     AmneziaWG 1.x: fixed headers (range low bounds), S1/S2
 #   wg     vanilla WireGuard (in-tree wireguard.ko, wg tool)
 #
-# The AWG clients are emulated by this module with the matching
-# configuration. Run as root with amneziawg loaded:
+# The AWG clients use the matching configuration on CLIENT_KIND (default:
+# this module). For a strict test build upstream as a second module with
+# another name and genetlink family, plus awg tools for that family, and
+# pass CLIENT_KIND/CLIENT_AWG: upstream only accepts its own format and
+# does not announce itself, so the server has to get every format right
+# and learn from packet shapes alone.
 #
-#   AWG=/path/to/awg WG=/path/to/wg ./compat.sh
+# Run as root with amneziawg loaded:
+#
+#   AWG=/path/to/awg WG=/path/to/wg [CLIENT_KIND=awgup CLIENT_AWG=awgup] ./compat.sh
 #
 # Checks:
 #   1. client-initiated handshakes: every client gets through, the server
@@ -24,13 +30,19 @@
 #   2. no loss for older peers although the wide H4 range makes a large
 #      share of their transport packets fit the server's format as well;
 #   3. server-initiated handshakes to peers it has never heard from;
-#   4. compat=0 restores upstream behaviour: only c3 gets through.
+#   4. compat=0 restores upstream behaviour: only c3 gets through;
+#   5. two hosts running this module do not drag each other down to an
+#      older format when one of them probed while the other was down.
 
 set -e
 AWG=${AWG:-awg}
 WG=${WG:-wg}
+CLIENT_KIND=${CLIENT_KIND:-amneziawg}
+CLIENT_AWG=${CLIENT_AWG:-$AWG}
 PARAM=/sys/module/amneziawg/parameters/compat
-CLIENTS="c3 c3nohp c2 c2nos c1 wg"
+CLIENTS=${CLIENTS:-"c3 c3nohp c2 c2nos c1 wg"}
+TESTS=${TESTS:-"1 2 3 4 5"}
+want() { [[ " $TESTS " == *" $1 "* ]]; }
 failed=0
 pass() { printf '  \e[32mPASS\e[0m %s\n' "$*"; }
 fail() { printf '  \e[31mFAIL\e[0m %s\n' "$*"; failed=1; }
@@ -38,7 +50,7 @@ n() { ip netns exec "$@"; }
 
 cleanup() {
 	set +e
-	for ns in srv $CLIENTS; do ip netns del $ns 2>/dev/null; done
+	for ns in srv $CLIENTS smart; do ip netns del $ns 2>/dev/null; done
 }
 trap cleanup EXIT
 cleanup
@@ -57,6 +69,7 @@ Jmax = 70"
 HPK=$($AWG genkey)
 
 srv_key=$($AWG genkey); srv_pub=$(echo $srv_key | $AWG pubkey)
+smart_key=$($AWG genkey); smart_pub=$(echo $smart_key | $AWG pubkey)
 declare -A key pub idx
 i=2
 for c in $CLIENTS; do
@@ -89,6 +102,7 @@ setup_server() { # $1 = with client endpoints
 			printf '[Peer]\nPublicKey = %s\nAllowedIPs = 10.0.0.%s/32\n' ${pub[$c]} ${idx[$c]}
 			[ -n "$1" ] && printf 'Endpoint = 192.168.%s.2:51820\n' ${idx[$c]}
 		done
+		printf '[Peer]\nPublicKey = %s\nAllowedIPs = 10.0.0.20/32\n' $smart_pub
 	} > /tmp/awgs.conf
 	n srv $AWG setconf awgs /tmp/awgs.conf
 	n srv ip addr add 10.0.0.1/24 dev awgs
@@ -110,9 +124,9 @@ for c in $CLIENTS; do
 		printf '[Interface]\nPrivateKey = %s\nListenPort = 51820\n' ${key[$c]} > /tmp/$c.conf
 		TOOL=$WG
 	else
-		n $c ip link add awg$c type amneziawg
+		n $c ip link add awg$c type $CLIENT_KIND
 		{ printf '[Interface]\nPrivateKey = %s\nListenPort = 51820\n' ${key[$c]}; device_conf $c; } > /tmp/$c.conf
-		TOOL=$AWG
+		TOOL=$CLIENT_AWG
 	fi
 	printf '[Peer]\nPublicKey = %s\nAllowedIPs = 10.0.0.0/24\nEndpoint = 192.168.%s.1:51820\n' \
 		$srv_pub ${idx[$c]} >> /tmp/$c.conf
@@ -162,6 +176,7 @@ ping_until() { # $1 = netns, $2 = address, $3 = seconds
 
 echo 1 > $PARAM
 
+if want 1; then
 echo "1. Client-initiated handshakes"
 setup_server
 mark=$(dmesg | wc -l)
@@ -170,12 +185,18 @@ for c in $CLIENTS; do
 done
 check_logs $mark
 
+fi
+
+if want 2; then
 echo "2. No loss with ambiguous transport headers"
 for c in $CLIENTS; do
 	loss=$(n $c ping -q -c 300 -i 0.01 -s 1000 10.0.0.1 | sed -n 's/.* \([0-9.]*\)% packet loss.*/\1/p')
 	if [ "$loss" = "0" ]; then pass "$c: 300 pings, 0% loss"; else fail "$c: ${loss:-?}% loss"; fi
 done
 
+fi
+
+if want 3; then
 echo "3. Server-initiated handshakes to unknown peers (compat=2)"
 echo 2 > $PARAM
 setup_server endpoints
@@ -191,6 +212,9 @@ for c in $CLIENTS; do
 done
 check_logs $mark
 
+fi
+
+if want 4; then
 echo "4. compat=0 is upstream behaviour"
 echo 0 > $PARAM
 setup_server
@@ -204,6 +228,38 @@ for c in $CLIENTS; do
 	if [ $r = $want ]; then pass "$c: $([ $r = ok ] && echo connects || echo rejected)"; else fail "$c: got $r, expected $want"; fi
 done
 echo 1 > $PARAM
+fi
+
+if want 5; then
+echo "5. No mutual downgrade between two hosts running the fallback"
+setup_server
+ip netns add smart
+n smart ip link set lo up
+ip link add vsmart netns srv type veth peer name eth0 netns smart
+n srv ip addr add 192.168.20.1/24 dev vsmart
+n srv ip link set vsmart up
+n smart ip addr add 192.168.20.2/24 dev eth0
+n smart ip link set eth0 up
+n smart ip link add awgp type amneziawg
+{
+	printf '[Interface]\nPrivateKey = %s\n' $smart_key
+	device_conf c3
+	printf '[Peer]\nPublicKey = %s\nAllowedIPs = 10.0.0.0/24\nEndpoint = 192.168.20.1:51820\n' $srv_pub
+} > /tmp/smart.conf
+n smart $AWG setconf awgp /tmp/smart.conf
+n smart ip addr add 10.0.0.20/24 dev awgp
+n smart ip link set awgp up
+mark=$(dmesg | wc -l)
+n srv ip link set awgs down	# the client starts while the server is down,
+( ping_until smart 10.0.0.1 60 && echo ok > /tmp/r.smart || echo no > /tmp/r.smart ) &
+sleep 17			# probes older formats,
+n srv ip link set awgs up	# and the server comes back
+wait
+if [ "$(cat /tmp/r.smart)" = ok ]; then pass "client reaches the restarted server"; else fail "client cannot reach the restarted server"; fi
+n smart ping -q -c 50 -i 0.02 10.0.0.1 >/dev/null 2>&1 || true
+log=$(dmesg | tail -n +$((mark + 1)) | grep -E "awgp: peer|awgs: peer .*192.168.20.2:" | grep -v "as configured" || true)
+if [ -z "$log" ]; then pass "both sides use the full protocol"; else fail "fallback stuck:"; echo "$log"; fi
+fi
 
 [ $failed = 0 ] && echo "ALL PASSED" || echo "SOME TESTS FAILED"
 exit $failed

@@ -242,7 +242,7 @@ static bool encrypt_packet(struct sk_buff *skb, struct noise_keypair *keypair
 	unsigned int udp_window;
 	int padding;
 	u16_range_t content_padding_addition;
-	u8 lacks = awg_peer_lacks(peer);
+	u8 lacks = awg_peer_lacks(peer) ^ awg_skb_toggle(skb);
 
 	padding = awg_padding_s34(lacks, peer->device->transport_padding);
 	content_padding_addition = peer->device->content_padding_addition;

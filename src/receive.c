@@ -271,6 +271,7 @@ static void wg_receive_handshake_packet(struct wg_device *wg,
 			 * immediate confirmation of the session.
 			 */
 			wg_packet_send_keepalive(peer);
+			awg_compat_confirm_session(peer);
 		}
 		break;
 	}

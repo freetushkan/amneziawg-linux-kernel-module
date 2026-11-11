@@ -458,3 +458,73 @@ void awg_compat_learn(struct wg_peer *peer, const struct sk_buff *skb)
 	     (new & AWG_LACK_ALL)))
 		awg_log(peer, new);
 }
+
+/*
+ * Initiating to a peer we have not heard from yet: its version is unknown,
+ * so if the handshake goes unanswered, retry in the formats of older
+ * versions in turn. WireGuard is only probed with compat=2, since it shows
+ * a plain WireGuard handshake on the wire.
+ */
+static const u8 awg_probe_masks[] = {
+	0,						/* as configured */
+	AWG_LACK_HP | AWG_LACK_V3,			/* AWG 2.x */
+	AWG_LACK_HP | AWG_LACK_V3 | AWG_LACK_RANGE |
+		AWG_LACK_S34,				/* AWG 1.x */
+	AWG_LACK_ALL					/* WireGuard */
+};
+
+void awg_compat_handshake_unanswered(struct wg_peer *peer)
+{
+	unsigned int mode = READ_ONCE(awg_compat_mode), n;
+
+	if (!mode || (READ_ONCE(peer->awg_compat) & AWG_STATE_LEARNED))
+		return;
+	/* Own counter: timer_handshake_attempts is reset by every packet
+	 * queued while the handshake is pending.
+	 */
+	n = ARRAY_SIZE(awg_probe_masks) - (mode < AWG_COMPAT_PROBE_WG);
+	peer->awg_probe = (peer->awg_probe + 1) % n;
+	WRITE_ONCE(peer->awg_compat, awg_probe_masks[peer->awg_probe]);
+}
+
+/*
+ * We completed a handshake as the initiator, so the peer waits for our first
+ * transport packet. If we do not know whether it uses S4 yet, confirm the
+ * session with a second keepalive in the other S4 format: the peer drops the
+ * one it cannot parse, answers the other, and its answer tells us.
+ */
+void awg_compat_confirm_session(struct wg_peer *peer)
+{
+	u8 f = READ_ONCE(peer->awg_compat);
+	struct sk_buff *skb;
+
+	if (!READ_ONCE(awg_compat_mode) || !peer->device->transport_padding ||
+	    (f & (AWG_LACK_AWG | AWG_STATE_S34_SEEN)))
+		return;
+	skb = alloc_skb(DATA_PACKET_HEAD_ROOM + MESSAGE_MINIMUM_LENGTH,
+			GFP_ATOMIC);
+	if (unlikely(!skb))
+		return;
+	skb_reserve(skb, DATA_PACKET_HEAD_ROOM);
+	skb->dev = peer->device->dev;
+	PACKET_CB(skb)->mtu = skb->dev->mtu;
+	PACKET_CB(skb)->is_keepalive = true;
+	PACKET_CB(skb)->awg_lacks = AWG_LACK_S34;
+	skb_queue_tail(&peer->staged_packet_queue, skb);
+	wg_packet_send_staged_packets(peer);
+}
+
+/*
+ * We sent transport packets after a handshake and got nothing back. If S4
+ * was only guessed, the guess may be wrong: try the other way.
+ */
+void awg_compat_data_unanswered(struct wg_peer *peer)
+{
+	u8 f = READ_ONCE(peer->awg_compat);
+
+	if (!READ_ONCE(awg_compat_mode) || !peer->device->transport_padding ||
+	    !(f & AWG_STATE_LEARNED) ||
+	    (f & (AWG_LACK_AWG | AWG_STATE_S34_SEEN)))
+		return;
+	WRITE_ONCE(peer->awg_compat, f ^ AWG_LACK_S34);
+}
