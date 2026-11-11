@@ -7,12 +7,22 @@
 #include "awg_fallback.h"
 #include "device.h"
 #include "messages.h"
+#include "peerlookup.h"
 
+#include <crypto/algapi.h>
+#include <crypto/blake2s.h>
+#include <crypto/chacha.h>
 #include <linux/moduleparam.h>
+#include <linux/rculist.h>
 #include <linux/skbuff.h>
 
 unsigned int awg_compat_mode = AWG_COMPAT_ON;
 module_param_named(compat, awg_compat_mode, uint, 0644);
+/* Set once any peer turned out to lack a feature. Until then packets that
+ * match the device configuration are not checked for other shapes.
+ */
+static bool awg_lacking_seen;
+
 MODULE_PARM_DESC(compat, "Fallback for peers running older protocol versions: 0 - off (upstream behaviour), 1 - detect AmneziaWG 1.x/2.x peers (default), 2 - also probe vanilla WireGuard when initiating to an unknown peer");
 
 /*
@@ -96,14 +106,27 @@ static u32 awg_read_value(struct sk_buff *skb, u16 padding, bool hp,
 	return hp ? value ^ get_unaligned_le32(hash) : value;
 }
 
-/* Mirrors awg_determine_type_and_padding() for an arbitrary shape. */
-static bool awg_try(struct sk_buff *skb, const struct wg_device *wg,
-		    const struct awg_shape *s, const u8 hash[4],
-		    struct awg_match *m)
+static bool awg_same(const struct awg_match *a, const struct awg_match *b)
+{
+	return a->type == b->type && a->padding == b->padding &&
+	       a->shape->hp == b->shape->hp;
+}
+
+#define AWG_MAX_MATCHES 8
+
+/* Mirrors awg_determine_type_and_padding() for an arbitrary shape, but
+ * appends every message type the packet fits, not just the first one.
+ * Returns the new number of matches.
+ */
+static int awg_try(struct sk_buff *skb, const struct wg_device *wg,
+		   const struct awg_shape *s, const u8 hash[4],
+		   struct awg_match *matches, int n)
 {
 	u8 i;
+	int j;
 
-	for (i = 0; i < ARRAY_SIZE(awg_msgs); ++i) {
+	for (i = 0; i < ARRAY_SIZE(awg_msgs) && n < AWG_MAX_MATCHES; ++i) {
+		struct awg_match *m = &matches[n];
 		unsigned int expected = s->padding[i] + awg_msgs[i].len;
 		u8 buf[4], *p;
 		u32 value;
@@ -127,9 +150,133 @@ static bool awg_try(struct sk_buff *skb, const struct wg_device *wg,
 		m->header_len = awg_msgs[i].header_len;
 		m->padding = s->padding[i];
 		m->value = value;
-		return true;
+		for (j = 0; j < n && !awg_same(&matches[j], m); ++j)
+			;
+		if (j == n)
+			++n;
 	}
-	return false;
+	return n;
+}
+
+/*
+ * A packet may fit more than one (shape, message type) pair: the 4 bytes a
+ * pair takes for the header are effectively random for packets of another
+ * pair, so they fall into a header range with probability width / 2^32,
+ * which is not small for wide ranges. This already happens within the
+ * device configuration alone: with random trailers a transport packet is
+ * first tested as an initiation and a response.
+ *
+ * Pick the pair under which the packet makes sense, cheapest checks first:
+ * the receiver index of transport packets, cookie replies and responses
+ * must belong to us, and an initiation must carry a valid mac1.
+ */
+
+/* Remove header protection from a copy of the message start. */
+static void awg_unprotect(const struct chacha_state *state, u8 *buf, size_t len)
+{
+	struct chacha_state st = *state;
+
+	chacha20_crypt(&st, buf, buf, len);
+	memzero_explicit(&st, sizeof(st));
+}
+
+static bool awg_index_valid(struct sk_buff *skb, struct wg_device *wg,
+			    const struct awg_match *m,
+			    const struct chacha_state *state,
+			    size_t offset, enum index_hashtable_type type)
+{
+	struct index_hashtable *table = wg->index_hashtable;
+	struct index_hashtable_entry *entry;
+	u8 buf[12];
+	__le32 index;
+	bool found = false;
+
+	if (skb_copy_bits(skb, m->padding, buf, offset + sizeof(index)))
+		return false;
+	if (m->shape->hp)
+		awg_unprotect(state, buf, offset + sizeof(index));
+	memcpy(&index, buf + offset, sizeof(index));
+
+	/* Same lookup as wg_index_hashtable_lookup(), without taking refs */
+	rcu_read_lock_bh();
+	hlist_for_each_entry_rcu_bh(entry,
+		&table->hashtable[(__force u32)index &
+				  (HASH_SIZE(table->hashtable) - 1)],
+		index_hash) {
+		if (entry->index == index) {
+			found = entry->type & type;
+			break;
+		}
+	}
+	rcu_read_unlock_bh();
+	return found;
+}
+
+static bool awg_mac1_valid(struct sk_buff *skb, struct wg_device *wg,
+			   const struct awg_match *m,
+			   const struct chacha_state *state)
+{
+	u8 msg[sizeof(struct message_handshake_initiation)];
+	u8 mac1[COOKIE_LEN];
+	size_t len = awg_msgs[m->msg].len;
+	bool ret;
+
+	if (skb_copy_bits(skb, m->padding, msg, len))
+		return false;
+	if (m->shape->hp)
+		awg_unprotect(state, msg, len);
+	/* Same as compute_mac1() in cookie.c */
+	blake2s(wg->cookie_checker.message_mac1_key, NOISE_SYMMETRIC_KEY_LEN,
+		msg, len - sizeof(struct message_macs), mac1, COOKIE_LEN);
+	ret = !crypto_memneq(mac1, msg + len - sizeof(struct message_macs),
+			     COOKIE_LEN);
+	memzero_explicit(msg, sizeof(msg));
+	return ret;
+}
+
+static bool awg_valid(struct sk_buff *skb, struct wg_device *wg,
+		      const struct awg_match *m,
+		      const struct chacha_state *state)
+{
+	switch (m->type) {
+	case MESSAGE_DATA:
+		return awg_index_valid(skb, wg, m, state,
+				       offsetof(struct message_data, key_idx),
+				       INDEX_HASHTABLE_KEYPAIR);
+	case MESSAGE_HANDSHAKE_COOKIE:
+		return awg_index_valid(skb, wg, m, state,
+				       offsetof(struct message_handshake_cookie,
+						receiver_index),
+				       INDEX_HASHTABLE_HANDSHAKE);
+	case MESSAGE_HANDSHAKE_RESPONSE:
+		return awg_index_valid(skb, wg, m, state,
+				       offsetof(struct message_handshake_response,
+						receiver_index),
+				       INDEX_HASHTABLE_HANDSHAKE);
+	default:
+		return awg_mac1_valid(skb, wg, m, state);
+	}
+}
+
+static const struct awg_match *awg_pick(struct sk_buff *skb,
+					struct wg_device *wg,
+					const struct awg_match *matches, int n,
+					const struct chacha_state *state)
+{
+	static const u32 order[] = {
+		MESSAGE_DATA, MESSAGE_HANDSHAKE_COOKIE,
+		MESSAGE_HANDSHAKE_RESPONSE, MESSAGE_HANDSHAKE_INITIATION
+	};
+	int i, j;
+
+	for (i = 0; i < ARRAY_SIZE(order); ++i) {
+		for (j = 0; j < n; ++j) {
+			if (matches[j].type == order[i] &&
+			    awg_valid(skb, wg, &matches[j], state))
+				return &matches[j];
+		}
+	}
+	return &matches[0];
 }
 
 /* Record which features the packet shows or lacks, for awg_compat_learn(). */
@@ -194,8 +341,9 @@ size_t awg_compat_classify(struct sk_buff *skb, struct wg_device *wg,
 			.trailers = wg->random_trailers
 		}
 	};
-	struct awg_match m;
-	int i, n = 1;
+	struct awg_match matches[AWG_MAX_MATCHES];
+	const struct awg_match *m = matches;
+	int i, n = 0, shapes_n = 1;
 
 	PACKET_CB(skb)->awg_lacks = 0;
 	PACKET_CB(skb)->awg_known = 0;
@@ -203,39 +351,52 @@ size_t awg_compat_classify(struct sk_buff *skb, struct wg_device *wg,
 		return header_len;
 
 	if (header_len) {
-		m.shape = &shapes[0];
-		m.msg = awg_msg_index(*type);
-		m.type = *type;
-		m.header_len = header_len;
-		m.padding = *padding;
-		m.value = m.msg < 2 ? awg_read_value(skb, *padding, *protected,
-						     hash) : 0;
-		goto found;
+		matches[0].shape = &shapes[0];
+		matches[0].msg = awg_msg_index(*type);
+		matches[0].type = *type;
+		matches[0].header_len = header_len;
+		matches[0].padding = *padding;
+		matches[0].value = matches[0].msg < 2 ?
+			awg_read_value(skb, *padding, *protected, hash) : 0;
+		n = 1;
+
+		if (!READ_ONCE(awg_lacking_seen)) {
+			/* Fast path. Only a handshake message with trailing
+			 * bytes may as well be a transport packet.
+			 */
+			if (*type == MESSAGE_DATA ||
+			    skb->len == *padding + awg_msgs[matches[0].msg].len)
+				goto out;
+			n = awg_try(skb, wg, &shapes[0], hash, matches, n);
+			goto pick;
+		}
+		n = awg_try(skb, wg, &shapes[0], hash, matches, n);
 	}
 
 	/* AWG 3.x without header protection */
 	if (*protected) {
-		shapes[n] = shapes[0];
-		shapes[n++].hp = false;
+		shapes[shapes_n] = shapes[0];
+		shapes[shapes_n++].hp = false;
 	}
 	/* AWG 1.x/2.x without S3/S4 */
 	if (wg->cookie_padding || wg->transport_padding)
-		shapes[n++] = (struct awg_shape){
+		shapes[shapes_n++] = (struct awg_shape){
 			.padding = { wg->init_padding, wg->resp_padding }
 		};
 	/* WireGuard */
-	shapes[n++] = (struct awg_shape){ .wg = true };
+	shapes[shapes_n++] = (struct awg_shape){ .wg = true };
 
-	for (i = 1; i < n; ++i) {
-		if (awg_try(skb, wg, &shapes[i], hash, &m))
-			goto found;
-	}
-	return 0;
-
-found:
-	awg_set_shape(skb, wg, &m);
-	*protected = m.shape->hp;
-	*padding = m.padding;
-	*type = m.type;
-	return m.header_len;
+	for (i = 1; i < shapes_n; ++i)
+		n = awg_try(skb, wg, &shapes[i], hash, matches, n);
+	if (!n)
+		return 0;
+pick:
+	if (n > 1)
+		m = awg_pick(skb, wg, matches, n, state);
+out:
+	awg_set_shape(skb, wg, m);
+	*protected = m->shape->hp;
+	*padding = m->padding;
+	*type = m->type;
+	return m->header_len;
 }
