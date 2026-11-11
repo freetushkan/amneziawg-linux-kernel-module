@@ -69,6 +69,7 @@ struct wg_peer {
 	u64 internal_id;
 	atomic_t jp_packet_counter;
 	unsigned int udp_window;
+	u8 awg_compat;
 };
 
 struct wg_peer *wg_peer_create(struct wg_device *wg,

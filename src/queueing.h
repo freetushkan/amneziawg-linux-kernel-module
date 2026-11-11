@@ -65,6 +65,7 @@ struct packet_cb {
 	u32 padding;
 	u8 ds;
 	bool is_keepalive;
+	u8 awg_lacks, awg_known;
 };
 
 #define PACKET_CB(skb) ((struct packet_cb *)((skb)->cb))
