@@ -3,6 +3,7 @@
  * Copyright (C) 2015-2019 Jason A. Donenfeld <Jason@zx2c4.com>. All Rights Reserved.
  */
 
+#include "awg_fallback.h"
 #include "header_protection.h"
 #include "queueing.h"
 #include "device.h"
@@ -151,6 +152,8 @@ static int prepare_skb_header(struct sk_buff *skb, struct wg_device *wg)
 	}
 
 	header_len = awg_determine_type_and_padding(skb, wg, hash, &padding, &type);
+	header_len = awg_compat_classify(skb, wg, &state, &protected, hash,
+					 header_len, &padding, &type);
 	if (unlikely(!header_len))
 		return -EINVAL;
 

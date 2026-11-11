@@ -98,4 +98,15 @@ static inline bool awg_has_v3(u8 lacks)
 	return likely(!(lacks & (AWG_LACK_AWG | AWG_LACK_V3)));
 }
 
+/* Called right after awg_determine_type_and_padding(). Falls back to the
+ * packet shapes of older peers when the device configuration did not match,
+ * and records the observed shape in PACKET_CB(). Returns the header length
+ * (0 to drop) and updates padding, type and whether to remove header
+ * protection.
+ */
+size_t awg_compat_classify(struct sk_buff *skb, struct wg_device *wg,
+			   const struct chacha_state *state, bool *protected,
+			   const u8 hash[4], size_t header_len, u16 *padding,
+			   u32 *type);
+
 #endif /* _AWG_FALLBACK_H */
