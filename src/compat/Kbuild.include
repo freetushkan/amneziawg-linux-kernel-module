@@ -45,6 +45,16 @@ ccflags-y += -I$(kbuild-dir)/compat/udp_tunnel/include
 amneziawg-y += compat/udp_tunnel/udp_tunnel.o
 endif
 
+compat-udp-tunnel-setup-sk := $(shell grep -s -E "void setup_udp_tunnel_sock.struct net \*net, struct sock \*sk" "$(srctree)/include/net/udp_tunnel.h")
+ifneq ($(compat-udp-tunnel-setup-sk),)
+ccflags-y += -DCOMPAT_HAVE_SETUP_UDP_TUNNEL_SOCK_SK
+endif
+
+compat-udp-tunnel-release-sk := $(shell grep -s -E "void udp_tunnel_sock_release.struct sock \*sk" "$(srctree)/include/net/udp_tunnel.h")
+ifneq ($(compat-udp-tunnel-release-sk),)
+ccflags-y += -DCOMPAT_HAVE_UDP_TUNNEL_SOCK_RELEASE_SK
+endif
+
 ifeq ($(shell grep -s -F "int crypto_memneq" "$(srctree)/include/crypto/algapi.h")$(shell grep -s -F "int crypto_memneq" "$(srctree)/include/crypto/utils.h"),)
 ccflags-y += -include $(kbuild-dir)/compat/memneq/include.h
 amneziawg-y += compat/memneq/memneq.o

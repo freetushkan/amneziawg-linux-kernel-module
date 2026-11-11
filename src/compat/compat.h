@@ -1444,9 +1444,16 @@ static inline void __compat_chacha20_crypt(struct chacha_state *state,
 
 #endif
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(7, 1, 5)
+/* The struct socket -> struct sock conversion of these two helpers landed in
+ * 7.1.5, but distributions backport them independently of each other (e.g.
+ * Ubuntu 7.0.0-42 has only setup_udp_tunnel_sock() converted), so detect each
+ * one from the headers in Kbuild.include rather than by version.
+ */
 #include <net/udp_tunnel.h>
+#ifndef COMPAT_HAVE_SETUP_UDP_TUNNEL_SOCK_SK
 #define setup_udp_tunnel_sock(net, sk, sock_cfg) setup_udp_tunnel_sock(net, sk->sk_socket, sock_cfg)
+#endif
+#ifndef COMPAT_HAVE_UDP_TUNNEL_SOCK_RELEASE_SK
 #define udp_tunnel_sock_release(sk) udp_tunnel_sock_release(sk->sk_socket)
 #endif
 
