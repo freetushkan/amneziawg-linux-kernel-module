@@ -400,3 +400,61 @@ out:
 	*type = m->type;
 	return m->header_len;
 }
+
+static void awg_log(const struct wg_peer *peer, u8 f)
+{
+	const char *proto, *extra = "";
+
+	if (f & AWG_LACK_AWG) {
+		proto = "WireGuard";
+	} else if (f & AWG_LACK_RANGE) {
+		proto = "AmneziaWG 1.x";
+	} else if (f & AWG_LACK_V3) {
+		proto = "AmneziaWG 2.x";
+		if (f & AWG_LACK_S34)
+			extra = " without S3/S4";
+	} else if (f & AWG_LACK_HP) {
+		proto = "AmneziaWG 3.x";
+		extra = " without header protection";
+	} else {
+		proto = "AmneziaWG, as configured";
+	}
+
+	net_info_ratelimited("%s: peer %llu (%pISpfsc) speaks %s%s\n",
+			     peer->device->dev->name, peer->internal_id,
+			     &peer->endpoint.addr, proto, extra);
+}
+
+void awg_compat_learn(struct wg_peer *peer, const struct sk_buff *skb)
+{
+	u8 known = PACKET_CB(skb)->awg_known;
+	u8 lacks = PACKET_CB(skb)->awg_lacks & known;
+	u8 old = READ_ONCE(peer->awg_compat), new;
+
+	BUILD_BUG_ON(sizeof(struct packet_cb) > sizeof_field(struct sk_buff, cb));
+
+	new = (old & ~known) | lacks | AWG_STATE_LEARNED;
+	if (known & AWG_LACK_S34) {
+		new |= AWG_STATE_S34_SEEN;
+	} else if (!(old & (AWG_STATE_S34_SEEN | AWG_STATE_LEARNED)) &&
+		   (known & AWG_LACK_RANGE)) {
+		/* Until a transport packet shows it, guess S3/S4 from the
+		 * header kind: fixed headers mean AWG 1.x without S3/S4.
+		 * Only on first contact, so a correction made by
+		 * awg_compat_data_unanswered() sticks.
+		 */
+		new &= ~AWG_LACK_S34;
+		if (lacks & AWG_LACK_RANGE)
+			new |= AWG_LACK_S34;
+	}
+	if (likely(new == old))
+		return;
+
+	WRITE_ONCE(peer->awg_compat, new);
+	if (new & AWG_LACK_ALL)
+		WRITE_ONCE(awg_lacking_seen, true);
+	if (((new ^ old) & AWG_LACK_ALL) ||
+	    ((new & ~old & (AWG_STATE_LEARNED | AWG_STATE_S34_SEEN)) &&
+	     (new & AWG_LACK_ALL)))
+		awg_log(peer, new);
+}

@@ -233,6 +233,7 @@ static void wg_receive_handshake_packet(struct wg_device *wg,
 			return;
 		}
 		wg_socket_set_peer_endpoint_from_skb(peer, skb);
+		awg_compat_learn(peer, skb);
 		net_dbg_ratelimited("%s: Receiving handshake initiation from peer %llu (%pISpfsc)\n",
 				    wg->dev->name, peer->internal_id,
 				    &peer->endpoint.addr);
@@ -255,6 +256,7 @@ static void wg_receive_handshake_packet(struct wg_device *wg,
 			return;
 		}
 		wg_socket_set_peer_endpoint_from_skb(peer, skb);
+		awg_compat_learn(peer, skb);
 		net_dbg_ratelimited("%s: Receiving handshake response from peer %llu (%pISpfsc)\n",
 				    wg->dev->name, peer->internal_id,
 				    &peer->endpoint.addr);
@@ -574,6 +576,8 @@ int wg_packet_rx_poll(struct napi_struct *napi, int budget)
 		udp_window = PACKET_CB(skb)->padding + MESSAGE_MINIMUM_LENGTH + skb->len;
 		if (READ_ONCE(peer->udp_window) < udp_window)
 			WRITE_ONCE(peer->udp_window, udp_window);
+
+		awg_compat_learn(peer, skb);
 
 		wg_reset_packet(skb, false);
 		wg_packet_consume_data_done(peer, skb, &endpoint);

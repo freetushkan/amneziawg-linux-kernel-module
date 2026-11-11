@@ -50,6 +50,8 @@ extern unsigned int awg_compat_mode;
 
 static inline u8 awg_peer_lacks(const struct wg_peer *peer)
 {
+	if (unlikely(!READ_ONCE(awg_compat_mode)))
+		return 0;
 	return READ_ONCE(peer->awg_compat) & AWG_LACK_ALL;
 }
 
@@ -108,5 +110,11 @@ size_t awg_compat_classify(struct sk_buff *skb, struct wg_device *wg,
 			   const struct chacha_state *state, bool *protected,
 			   const u8 hash[4], size_t header_len, u16 *padding,
 			   u32 *type);
+
+/* Update the peer's mask from a received packet. The packet must have been
+ * authenticated: a consumed handshake message or a decrypted, non-replayed
+ * transport packet.
+ */
+void awg_compat_learn(struct wg_peer *peer, const struct sk_buff *skb);
 
 #endif /* _AWG_FALLBACK_H */
