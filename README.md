@@ -1,5 +1,7 @@
 # AmneziaWG kernel module
 
+> **Fork** with backward compatibility for AmneziaWG 2.x/1.x and WireGuard clients on 3.x servers and DKMS deploy script: see [FORK.md](FORK.md).
+
 ## Table of contents
 
 - [Installation](#installation)
