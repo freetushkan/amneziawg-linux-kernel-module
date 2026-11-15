@@ -13,6 +13,7 @@
 #include <crypto/blake2s.h>
 #include <crypto/chacha.h>
 #include <linux/moduleparam.h>
+#include <linux/ratelimit.h>
 #include <linux/rculist.h>
 #include <linux/skbuff.h>
 
@@ -401,28 +402,47 @@ out:
 	return m->header_len;
 }
 
-static void awg_log(const struct wg_peer *peer, u8 f)
+/* What the kernel log says about a mask; masks with the same text are
+ * not announced again.
+ */
+static const char *awg_describe(u8 f)
 {
-	const char *proto, *extra = "";
+	if (f & AWG_LACK_AWG)
+		return "WireGuard";
+	if (f & AWG_LACK_RANGE)
+		return "AmneziaWG 1.x";
+	if (f & AWG_LACK_V3)
+		return (f & AWG_LACK_S34) ? "AmneziaWG 2.x without S3/S4" :
+					    "AmneziaWG 2.x";
+	if (f & AWG_LACK_HP)
+		return "AmneziaWG 3.x without header protection";
+	return "AmneziaWG, as configured";
+}
 
-	if (f & AWG_LACK_AWG) {
-		proto = "WireGuard";
-	} else if (f & AWG_LACK_RANGE) {
-		proto = "AmneziaWG 1.x";
-	} else if (f & AWG_LACK_V3) {
-		proto = "AmneziaWG 2.x";
-		if (f & AWG_LACK_S34)
-			extra = " without S3/S4";
-	} else if (f & AWG_LACK_HP) {
-		proto = "AmneziaWG 3.x";
-		extra = " without header protection";
-	} else {
-		proto = "AmneziaWG, as configured";
-	}
+/* Own budget: the shared net_ratelimit() one is easily used up when many
+ * peers connect at once, and these lines are rare (protocol changes of
+ * authenticated peers only).
+ */
+static DEFINE_RATELIMIT_STATE(awg_log_ratelimit, 5 * HZ, 100);
 
-	net_info_ratelimited("%s: peer %llu (%pISpfsc) speaks %s%s\n",
-			     peer->device->dev->name, peer->internal_id,
-			     &peer->endpoint.addr, proto, extra);
+/* Announce what we now believe about the peer, once per change of the text.
+ * Compared with what was last announced rather than with the previous mask:
+ * the mask may also change silently (S4 guesses), and its confirmation
+ * would otherwise go unmentioned. A peer speaking the full protocol from
+ * the start is not announced at all.
+ */
+static void awg_log(struct wg_peer *peer, u8 new)
+{
+	const char *text = awg_describe(new);
+
+	if (!(new & AWG_STATE_LEARNED) ||
+	    text == awg_describe(READ_ONCE(peer->awg_logged)))
+		return;
+	WRITE_ONCE(peer->awg_logged, new);
+	if (__ratelimit(&awg_log_ratelimit))
+		pr_info("%s: peer %llu (%pISpfsc) speaks %s\n",
+			peer->device->dev->name, peer->internal_id,
+			&peer->endpoint.addr, text);
 }
 
 /*
@@ -547,10 +567,7 @@ update:
 	WRITE_ONCE(peer->awg_compat, new);
 	if (new & AWG_LACK_ALL)
 		WRITE_ONCE(awg_lacking_seen, true);
-	if (((new ^ old) & AWG_LACK_ALL) ||
-	    ((new & ~old & (AWG_STATE_LEARNED | AWG_STATE_S34_SEEN)) &&
-	     (new & AWG_LACK_ALL)))
-		awg_log(peer, new);
+	awg_log(peer, new);
 }
 
 /*
@@ -587,10 +604,13 @@ void awg_compat_initiation(struct wg_peer *peer)
 }
 
 /*
- * We completed a handshake as the initiator, so the peer waits for our first
- * transport packet. If we do not know whether it uses S4 yet, confirm the
- * session with a second keepalive in the other S4 format: the peer drops the
- * one it cannot parse, answers the other, and its answer tells us.
+ * We completed a handshake as the initiator, so the peer cannot send on the
+ * new session until our first transport packet confirms it. If we do not
+ * know whether it uses S4 yet, confirm it with a second keepalive in the
+ * other S4 format: the peer drops the one it cannot parse and takes the
+ * session from the other. Keepalives are not answered, so S4 is learned
+ * from the peer's first own packet, or awg_compat_data_unanswered() flips
+ * the guess if ours keep going unanswered.
  */
 void awg_compat_confirm_session(struct wg_peer *peer)
 {
