@@ -17,9 +17,13 @@
 #   --dir DIR      where the checkout lives
 #                  (default: /usr/src/amneziawg-linux-kernel-module)
 #   --compat N     set the 'compat' module parameter persistently (0, 1, 2)
-#   --reload       load the new module now: restarts the awg-quick@ units
-#                  that are up, refuses if other amneziawg interfaces exist
-#   --force-reload like --reload, but also tears down other interfaces
+#   --reload       load the new module now. Interfaces come back the way they
+#                  were brought up: awg-quick@ units are restarted, awg-quick
+#                  configs in /etc/amnezia/amneziawg are taken down and up, and
+#                  other interfaces are saved (awg settings, addresses, routes)
+#                  and recreated. Runs detached, so an SSH session through one
+#                  of the tunnels may freeze for a moment but the reload
+#                  finishes even if it drops.
 #   --no-deps      do not install packages
 #
 # The DKMS version is 1.0.0+g<commit>, so 'dkms status' shows which commit
@@ -61,7 +65,7 @@ while [ $# -gt 0 ]; do
 	--dir) DIR=${2:?}; shift ;;
 	--compat) COMPAT=${2:?}; shift ;;
 	--reload) RELOAD=1 ;;
-	--force-reload) RELOAD=2 ;;
+	--force-reload) RELOAD=1 ;; # older name of --reload
 	--no-deps) DEPS=0 ;;
 	-h|--help) usage 0 ;;
 	*) die "unknown option: $1" ;;
@@ -254,6 +258,89 @@ loaded_is_current() {
 	[ "$(cat /sys/module/$NAME/srcversion)" = "$(srcversion_of "$(uname -r)")" ]
 }
 
+# Snapshot of an interface not managed by awg-quick, to recreate it after the
+# module is reloaded: awg settings, addresses, MTU, state and routes in all
+# tables. Rules, nftables/iptables and the like refer to the interface by
+# name and survive by themselves.
+snapshot_interface() { # $1 = interface, $2 = directory
+	local i=$1 S=$2/$1
+	mkdir -p "$S"
+	awg showconf "$i" > "$S/awg.conf"
+	ip -o link show dev "$i" | sed -n 's/.* mtu \([0-9]*\).*/\1/p' > "$S/mtu"
+	ip -o link show dev "$i" | grep -q '[<,]UP[,>]' && touch "$S/up"
+	ip -o addr show dev "$i" | awk '{
+		for (k = 1; k <= NF; k++) if ($k == "inet" || $k == "inet6") {
+			a = $(k + 1); if ($(k + 2) == "peer") a = a " peer " $(k + 3)
+			if (a !~ /^fe80/) print ($k == "inet6" ? "-6" : "-4"), a
+		} }' > "$S/addr"
+	{
+		ip -4 route show table all dev "$i" | sed 's/^/-4 /'
+		ip -6 route show table all dev "$i" | sed 's/^/-6 /'
+	} | grep -vE '^-[46] (local|broadcast|multicast|anycast) |proto kernel|^-6 fe80::' > "$S/routes" || true
+}
+
+# Runs detached from the terminal, so it finishes and brings the tunnels back
+# even if the SSH session it was started from goes through one of them and
+# drops meanwhile.
+reload_worker() {
+	cat <<'EOS'
+#!/bin/bash
+D=$1 NAME=amneziawg rc=0
+exec >>"$D/log" 2>&1 </dev/null
+trap '' HUP
+say() { echo "$*"; }
+restore() {
+	local i=$1 S=$D/$1 fam r
+	ip link add "$i" type $NAME || { say "  ! $i: could not recreate"; rc=1; return; }
+	awg setconf "$i" "$S/awg.conf" || { say "  ! $i: awg setconf failed"; rc=1; }
+	[ -s "$S/mtu" ] && ip link set "$i" mtu "$(cat "$S/mtu")"
+	while read -r fam r; do ip "$fam" addr add $r dev "$i" || rc=1; done < "$S/addr"
+	[ -e "$S/up" ] && ip link set "$i" up
+	while read -r fam r; do
+		ip "$fam" route add $r dev "$i" 2>/dev/null ||
+			ip "$fam" route replace $r dev "$i" 2>/dev/null || { say "  ! $i: route $r"; rc=1; }
+	done < "$S/routes"
+	say "  ✓ $i restored"
+}
+while read -r how i; do
+	case $how in
+	unit) systemctl stop "awg-quick@$i" && say "  ✓ awg-quick@$i stopped" ;;
+	quick) awg-quick down "$i" >/dev/null 2>&1 && say "  ✓ awg-quick down $i" || ip link del "$i" ;;
+	snap) ip link del "$i" ;;
+	esac
+done < "$D/plan"
+# Only this module: 'modprobe -r' would also try its dependencies and fail
+# when WireGuard uses them, although this module is gone. Interfaces are
+# torn down asynchronously, so give the references a moment to drop.
+unload() {
+	local t
+	for t in 1 2 3 4 5 6 7 8 9 10; do
+		[ -e /sys/module/$NAME ] || return 0
+		rmmod $NAME 2>/dev/null && return 0
+		sleep 0.5
+	done
+	[ ! -e /sys/module/$NAME ]
+}
+if unload; then
+	modprobe $NAME && say "  ✓ module reloaded" || { say "  ! modprobe $NAME failed"; rc=1; }
+else
+	say "  ! the module is still in use, not reloaded"; rc=1
+fi
+# Bring everything back whatever happened above.
+[ -e /sys/module/$NAME ] || modprobe $NAME || { say "  ! the module cannot be loaded at all"; rc=1; }
+while read -r how i; do
+	case $how in
+	unit) systemctl start "awg-quick@$i" && say "  ✓ awg-quick@$i started" ||
+		{ say "  ! awg-quick@$i did not start"; rc=1; } ;;
+	quick) awg-quick up "$i" >/dev/null 2>"$D/$i.err" && say "  ✓ awg-quick up $i" ||
+		{ say "  ! awg-quick up $i: $(tail -n 1 "$D/$i.err")"; rc=1; } ;;
+	snap) restore "$i" ;;
+	esac
+done < "$D/plan"
+say "@@done rc=$rc"
+EOS
+}
+
 reload_module() {
 	if [ -z "$(srcversion_of "$(uname -r)")" ]; then
 		warn "no module for the running kernel $(uname -r), nothing to load"
@@ -272,23 +359,57 @@ reload_module() {
 		return
 	fi
 
-	local units ifaces managed=() other=() i
+	local D=/run/$NAME-reload units i via ssh_dev n
 	units=$({ systemctl list-units --plain --no-legend --state=active 'awg-quick@*.service' 2>/dev/null || true; } |
 		awk '{print $1}')
-	ifaces=$(interfaces)
-	for i in $ifaces; do
-		if echo "$units" | grep -qx "awg-quick@$i.service"; then managed+=("$i"); else other+=("$i"); fi
+	rm -rf "$D"
+	mkdir -m 700 "$D"
+	: > "$D/plan"
+	log "Reloading the module"
+	for i in $(interfaces); do
+		if echo "$units" | grep -qx "awg-quick@$i.service"; then
+			echo "unit $i" >> "$D/plan"; ok "$i: awg-quick@$i"
+		elif [ -e "/etc/amnezia/amneziawg/$i.conf" ]; then
+			echo "quick $i" >> "$D/plan"; ok "$i: awg-quick, /etc/amnezia/amneziawg/$i.conf"
+		else
+			command -v awg >/dev/null || die "$i is not managed by awg-quick and awg is not installed to save it"
+			snapshot_interface "$i" "$D"
+			echo "snap $i" >> "$D/plan"
+			ok "$i: saved ($(wc -l < "$D/$i/addr") addresses, $(wc -l < "$D/$i/routes") routes)"
+		fi
 	done
-	if [ ${#other[@]} -gt 0 ] && [ $RELOAD != 2 ]; then
-		die "interfaces not managed by awg-quick@: ${other[*]}; bring them down or use --force-reload"
+	if [ -n "${SSH_CONNECTION:-}" ]; then
+		ssh_dev=$(ip route get "${SSH_CONNECTION%% *}" 2>/dev/null | sed -n 's/.* dev \([^ ]*\).*/\1/p')
+		if grep -qx "[a-z]* $ssh_dev" "$D/plan" 2>/dev/null; then
+			warn "this SSH session goes through $ssh_dev: it may freeze for a few seconds;" \
+				"the reload carries on if it drops (log: $D/log)"
+		fi
 	fi
 
-	log "Reloading the module"
-	for i in "${managed[@]}"; do systemctl stop "awg-quick@$i" && ok "stopped awg-quick@$i"; done
-	for i in "${other[@]}"; do ip link del "$i" && warn "deleted $i"; done
-	modprobe -r $NAME
-	modprobe $NAME
-	for i in "${managed[@]}"; do systemctl start "awg-quick@$i" && ok "started awg-quick@$i"; done
+	reload_worker > "$D/reload.sh"
+	: > "$D/log"
+	if command -v systemd-run >/dev/null && [ -d /run/systemd/system ]; then
+		via=systemd-run
+		systemd-run --quiet --collect --unit="$NAME-reload-$$" "$(command -v bash)" "$D/reload.sh" "$D"
+	else
+		via=setsid
+		setsid -f bash "$D/reload.sh" "$D" </dev/null >/dev/null 2>&1
+	fi
+
+	# Follow the log; the worker does not depend on this terminal.
+	n=0
+	for _ in $(seq 1 240); do
+		sed -n "$((n + 1)),\$p" "$D/log" | grep -v '^@@done' || true
+		n=$(wc -l < "$D/log")
+		grep -q '^@@done' "$D/log" && break
+		sleep 0.5
+	done
+	if ! grep -q '^@@done rc=0' "$D/log"; then
+		grep -q '^@@done' "$D/log" ||
+			die "the reload ($via) has not finished in 2 minutes, see $D/log"
+		die "the reload had problems, see $D/log and $D/plan"
+	fi
+	rm -rf "$D"
 	loaded_is_current && ok "running the new build" || warn "loaded module does not match the build"
 }
 

@@ -120,8 +120,10 @@ curl -fsSL https://raw.githubusercontent.com/freetushkan/amneziawg-linux-kernel-
 ```
 
 The DKMS version is `1.0.0+g<commit>`, so `dkms status` shows what is built.
-`--reload` switches to the new build right away by restarting the active
-`awg-quick@` units; otherwise it is picked up at the next reboot.
+`--reload` switches to the new build right away and brings every tunnel back
+the way it was brought up (`awg-quick@` unit, `awg-quick` config, or by hand,
+from a snapshot of its settings, addresses and routes). Otherwise the
+new build is picked up at the next reboot.
 
 ## Testing
 

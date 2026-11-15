@@ -15,9 +15,14 @@ Update to the latest commit of the branch the checkout is on:
 
     /usr/src/amneziawg-linux-kernel-module/scripts/deploy.sh update
 
-Switch the module now instead of at the next reboot (restarts the active
-`awg-quick@` units; refuses if other amneziawg interfaces exist, unless
-`--force-reload`):
+Switch the module now instead of at the next reboot. Every amneziawg interface
+comes back the way it was brought up: `awg-quick@` units are restarted, configs
+in `/etc/amnezia/amneziawg` go through `awg-quick down`/`up`, and interfaces set
+up by hand or by other tools are saved (awg settings, addresses, MTU, routes in
+all tables) and recreated; rules and firewall rules refer to them by name and
+stay. The reload runs detached (`systemd-run`, or `setsid`), so an SSH session
+through one of the tunnels freezes for a few seconds but the reload finishes
+even if the session drops (log: `/run/amneziawg-reload/log` while it runs):
 
     /usr/src/amneziawg-linux-kernel-module/scripts/deploy.sh update --reload
 
