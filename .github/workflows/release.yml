@@ -1,0 +1,143 @@
+name: Release
+
+# Push a tag (v*) to build the module for stock Ubuntu kernels, run the
+# protocol fallback test in a VM against upstream and this module, and put
+# the results into the release notes. If anything fails, the release is
+# created as a draft. Run it by hand on a branch to test without releasing,
+# or on a tag to redo the report.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      upstream_ref:
+        description: Upstream branch, tag or commit the strict clients run
+        default: master
+      tests:
+        description: Subset of compat.sh tests
+        default: 1 2 3 4 5
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: VM test (${{ matrix.kernel }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        # ga: newest 6.8 of Ubuntu 24.04, hwe: newest kernel in the archive
+        kernel: [ga, hwe]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' |
+            sudo tee /etc/udev/rules.d/99-kvm4all.rules >/dev/null
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Build and test
+        env:
+          KERNEL: ${{ matrix.kernel }}
+          UPSTREAM_REF: ${{ inputs.upstream_ref || 'master' }}
+          TESTS: ${{ inputs.tests || '1 2 3 4 5' }}
+        run: |
+          src/tests/vm/run.sh --kernel "$KERNEL" --upstream-ref "$UPSTREAM_REF" \
+            --tests "$TESTS" --work vm-work --report "report-$KERNEL.md"
+
+      - name: Summary
+        if: always()
+        run: cat report-*.md >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-${{ matrix.kernel }}
+          path: |
+            report-*.md
+            vm-work/console-*.log
+            vm-work/build-*/*/build.log
+          if-no-files-found: ignore
+
+  release:
+    name: Release notes
+    needs: test
+    if: always() && startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: results
+
+      - name: Compose notes
+        env:
+          TAG: ${{ github.ref_name }}
+          RESULT: ${{ needs.test.result }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          prev=$(git describe --tags --abbrev=0 "$TAG^" 2>/dev/null || true)
+          {
+            echo '<!-- vm-test:begin -->'
+            if [ "$RESULT" = success ]; then
+              echo "✅ **All VM tests passed** ([run]($RUN_URL))"
+            else
+              echo "❌ **VM tests failed** ([run]($RUN_URL)), the release is left as a draft"
+            fi
+            echo
+            if [ -n "$prev" ]; then
+              echo "## Changes since $prev"
+              echo
+              git log --no-merges --format='- %s (%h)' "$prev..$TAG" | head -n 100
+            else
+              echo "## Recent changes"
+              echo
+              git log --no-merges --format='- %s (%h)' -n 30 "$TAG"
+            fi
+            echo
+            echo "## Install"
+            echo
+            echo '```'
+            echo "curl -fsSL https://raw.githubusercontent.com/$REPO/$TAG/scripts/deploy.sh | bash -s -- install --ref $TAG"
+            echo '```'
+            echo
+            echo "## Test results"
+            echo
+            cat results/*/report-*.md 2>/dev/null || echo "No reports: see the run."
+            echo '<!-- vm-test:end -->'
+          } > generated.md
+          tar czf vm-test-logs.tar.gz -C results . 2>/dev/null || true
+
+      - name: Create or update the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          RESULT: ${{ needs.test.result }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            # Keep what was written by hand, replace only the generated block.
+            gh release view "$TAG" --json body -q .body > old.md
+            awk '/<!-- vm-test:begin -->/{skip=1} !skip{print} /<!-- vm-test:end -->/{skip=0}' old.md > kept.md
+            { cat kept.md; [ -s kept.md ] && echo; cat generated.md; } > notes.md
+            gh release edit "$TAG" --notes-file notes.md
+          else
+            draft=
+            [ "$RESULT" = success ] || draft=--draft
+            gh release create "$TAG" --title "$TAG" --notes-file generated.md --verify-tag $draft
+          fi
+          [ -s vm-test-logs.tar.gz ] && gh release upload "$TAG" vm-test-logs.tar.gz --clobber || true
