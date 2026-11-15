@@ -1,0 +1,20 @@
+[
+ {
+  "id": "43741043634-1",
+  "date": "2026-11-15 17:30 UTC",
+  "ok": true,
+  "pass": 156,
+  "known": 4,
+  "total": 160,
+  "clients": [
+   6,
+   6
+  ],
+  "tree": "e3aa1f9",
+  "upstream": "63ed35d chore: bump version",
+  "kernels": [
+   "6.8.0-149-generic",
+   "7.0.0-43-generic"
+  ]
+ }
+]
