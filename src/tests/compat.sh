@@ -168,11 +168,9 @@ check_logs() { # $1 = dmesg offset (lines)
 }
 
 ping_until() { # $1 = netns, $2 = address, $3 = seconds
-	local end=$((SECONDS + $3))
-	while [ $SECONDS -lt $end ]; do
-		n $1 ping -c 1 -W 1 $2 >/dev/null 2>&1 && return 0
-	done
-	return 1
+	# A steady stream, like real traffic: every packet queued while there is
+	# no session asks for a handshake as soon as the rate limit allows.
+	n $1 ping -q -c 1 -i 0.2 -w $3 $2 >/dev/null 2>&1
 }
 
 # Upstream clients with RandomTrailers drop a share of the server's

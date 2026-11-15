@@ -214,7 +214,7 @@ echo "@@ BEGIN own"
 AWG=/bin/awg WG=/bin/wg TESTS="$TESTS" bash /compat.sh 2>&1
 echo "@@ END own rc=\$?"
 echo "@@ BEGIN dmesg"
-dmesg | grep -E "amneziawg|awgup|BUG|WARNING|Oops|Call Trace|speaks" | tail -n 200
+dmesg | tail -n 400
 echo "@@ END dmesg"
 poweroff -f
 EOF
@@ -275,9 +275,12 @@ status=0
 		echo; echo "Module load errors:"; echo '```'; grep "^@@ insmod" "$LOG"; echo '```'
 		status=1
 	fi
-	if section dmesg | grep -qE "BUG|WARNING|Oops|Call Trace"; then
+	# Signatures of a kernel problem, not every line that says "warning"
+	# (CPU mitigation notices, module taint messages).
+	oops='WARNING: CPU|------------\[ cut here \]|BUG:|Oops|Call Trace|general protection fault|KASAN|refcount_t:|list_(add|del) corruption'
+	if section dmesg | grep -qE "$oops"; then
 		echo; echo "**Kernel warnings:**"; echo '```'
-		section dmesg | grep -E -A5 "BUG|WARNING|Oops|Call Trace" | head -n 60
+		section dmesg | grep -E -A12 "$oops" | head -n 80
 		echo '```'
 		status=1
 	fi
