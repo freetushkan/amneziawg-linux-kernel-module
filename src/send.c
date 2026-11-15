@@ -37,11 +37,14 @@ static void wg_packet_send_handshake_initiation(struct wg_peer *peer)
 	struct jp_spec* spec;
 	u16 min_timeout = !u16_range_is_zero(peer->device->rekey_timeout) ?
 		u16_range_lo(peer->device->rekey_timeout) : REKEY_TIMEOUT;
-	u8 lacks = awg_peer_lacks(peer);
+	u8 lacks;
 
 	if (!wg_birthdate_has_expired(atomic64_read(&peer->last_sent_handshake),
 				      min_timeout))
 		return; /* This function is rate limited. */
+
+	awg_compat_initiation(peer);
+	lacks = awg_peer_lacks(peer);
 
 	atomic64_set(&peer->last_sent_handshake, ktime_get_coarse_boottime_ns());
 	net_dbg_ratelimited("%s: Sending handshake initiation to peer %llu (%pISpfsc)\n",

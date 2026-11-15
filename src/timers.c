@@ -77,7 +77,6 @@ static void wg_expired_retransmit_handshake(struct timer_list *timer)
 		 */
 		wg_socket_clear_peer_endpoint_src(peer);
 
-		awg_compat_handshake_unanswered(peer);
 		wg_packet_send_queued_handshake_initiation(peer, true);
 	}
 }

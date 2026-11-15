@@ -118,10 +118,14 @@ size_t awg_compat_classify(struct sk_buff *skb, struct wg_device *wg,
  */
 void awg_compat_learn(struct wg_peer *peer, const struct sk_buff *skb);
 
-/* Timer hooks: our handshake initiation or our transport packets got no
- * answer. Try another format if the peer's one is not known for sure.
+/* About to send a handshake initiation: if the peer's format is not known,
+ * use the next one to probe.
  */
-void awg_compat_handshake_unanswered(struct wg_peer *peer);
+void awg_compat_initiation(struct wg_peer *peer);
+
+/* Timer hook: our transport packets got no answer. If S4 was only guessed,
+ * try the other way.
+ */
 void awg_compat_data_unanswered(struct wg_peer *peer);
 
 /* After a handshake we initiated: also confirm the session in the other S4

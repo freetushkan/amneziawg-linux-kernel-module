@@ -555,9 +555,15 @@ update:
 
 /*
  * Initiating to a peer we have not heard from yet: its version is unknown,
- * so if the handshake goes unanswered, retry in the formats of older
- * versions in turn. WireGuard is only probed with compat=2, since it shows
- * a plain WireGuard handshake on the wire.
+ * so every initiation goes out in the next format in turn, starting with the
+ * device configuration. WireGuard is only probed with compat=2, since it
+ * shows a plain WireGuard handshake on the wire.
+ *
+ * This steps on every initiation actually sent rather than on retransmit
+ * timeouts: any packet queued without a session asks for a new initiation as
+ * soon as the rate limit allows, which re-arms the retransmit timer, so with
+ * steady traffic the timer never fires. Initiations are rate limited to one
+ * per REKEY_TIMEOUT, so each format still gets that long to be answered.
  */
 static const u8 awg_probe_masks[] = {
 	0,						/* as configured */
@@ -567,18 +573,17 @@ static const u8 awg_probe_masks[] = {
 	AWG_LACK_ALL					/* WireGuard */
 };
 
-void awg_compat_handshake_unanswered(struct wg_peer *peer)
+void awg_compat_initiation(struct wg_peer *peer)
 {
 	unsigned int mode = READ_ONCE(awg_compat_mode), n;
 
 	if (!mode || (READ_ONCE(peer->awg_compat) & AWG_STATE_LEARNED))
 		return;
-	/* Own counter: timer_handshake_attempts is reset by every packet
-	 * queued while the handshake is pending.
-	 */
+	/* Serialized: initiations of a peer are sent from its own work item. */
 	n = ARRAY_SIZE(awg_probe_masks) - (mode < AWG_COMPAT_PROBE_WG);
-	peer->awg_probe = (peer->awg_probe + 1) % n;
+	peer->awg_probe %= n;
 	WRITE_ONCE(peer->awg_compat, awg_probe_masks[peer->awg_probe]);
+	peer->awg_probe = (peer->awg_probe + 1) % n;
 }
 
 /*
