@@ -1,6 +1,10 @@
 # About this fork
 
-[![Release](https://github.com/freetushkan/amneziawg-linux-kernel-module/actions/workflows/release.yml/badge.svg)](https://github.com/freetushkan/amneziawg-linux-kernel-module/actions/workflows/release.yml)
+[![compat](https://img.shields.io/endpoint?url=https://freetushkan.github.io/amneziawg-linux-kernel-module/badge/compat.json)](https://freetushkan.github.io/amneziawg-linux-kernel-module/)
+[![tested on](https://img.shields.io/endpoint?url=https://freetushkan.github.io/amneziawg-linux-kernel-module/badge/kernels.json)](https://freetushkan.github.io/amneziawg-linux-kernel-module/)
+[![upstream](https://img.shields.io/endpoint?url=https://freetushkan.github.io/amneziawg-linux-kernel-module/badge/upstream.json)](https://freetushkan.github.io/amneziawg-linux-kernel-module/)
+
+**[Latest compatibility report](https://freetushkan.github.io/amneziawg-linux-kernel-module/)**: every client generation against every scenario, per kernel, with history.
 
 This is [AmneziaWG kernel module](https://github.com/amnezia-vpn/amneziawg-linux-kernel-module)
 (AmneziaWG 3.x) with **per-peer backward compatibility**: a server configured for
@@ -16,7 +20,7 @@ with few conflicts.
 - [Configuration](#configuration)
 - [How it works](#how-it-works)
 - [Installation and updates](#installation-and-updates)
-- [Testing and releases](#testing-and-releases)
+- [Testing](#testing)
 - [Other changes](#other-changes)
 - [Limitations](#limitations)
 
@@ -119,7 +123,7 @@ The DKMS version is `1.0.0+g<commit>`, so `dkms status` shows what is built.
 `--reload` switches to the new build right away by restarting the active
 `awg-quick@` units; otherwise it is picked up at the next reboot.
 
-## Testing and releases
+## Testing
 
 - [`src/tests/compat.sh`](src/tests/compat.sh): a server with the full protocol
   against clients of every generation in network namespaces. It covers
@@ -129,10 +133,12 @@ The DKMS version is `1.0.0+g<commit>`, so `dkms status` shows what is built.
   Ubuntu kernel, twice. Once with clients on **upstream** built as a second
   module: strict, it accepts only its own format and does not announce itself.
   Once with clients on this module. Works locally (`--kernel hwe`) and in CI.
-- [Release workflow](.github/workflows/release.yml): pushing a `v*` tag runs the
-  VM test for the newest Ubuntu 24.04 GA (6.8) and HWE kernels against current
-  upstream. It then creates the release with the changes, an install command and
-  the test report in its notes. A failing run leaves the release as a draft.
+- [Compatibility workflow](.github/workflows/compat.yml): on every push to
+  `master`, every pull request, weekly (to catch upstream changes) and on demand.
+  It runs the VM test for the newest Ubuntu 24.04 GA (6.8) and HWE kernels
+  against current upstream. The matrix goes to the run summary and, for
+  `master`, to the [report page](https://freetushkan.github.io/amneziawg-linux-kernel-module/)
+  with history and the badges above.
 
 ## Other changes
 
