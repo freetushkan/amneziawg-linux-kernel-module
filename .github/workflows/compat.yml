@@ -1,0 +1,123 @@
+name: Compatibility
+
+# Build the module for stock Ubuntu kernels and run the protocol fallback
+# test in a VM, against clients on current upstream and on this tree.
+# The matrix goes to the run summary; on master it is also published to
+# GitHub Pages (branch gh-pages) with history and shields.io badges.
+# Weekly runs catch changes in upstream.
+
+on:
+  push:
+    branches: [master]
+    paths: ['src/**', 'scripts/**', '.github/workflows/compat.yml']
+  pull_request:
+    paths: ['src/**', 'scripts/**', '.github/workflows/compat.yml']
+  schedule:
+    - cron: '17 3 * * 1'
+  workflow_dispatch:
+    inputs:
+      upstream_ref:
+        description: Upstream branch, tag or commit the strict clients run
+        default: master
+      tests:
+        description: Subset of compat.sh tests
+        default: 1 2 3 4 5
+
+permissions:
+  contents: read
+
+concurrency:
+  group: compat-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: VM test (${{ matrix.kernel }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        # ga: newest 6.8 of Ubuntu 24.04, hwe: newest kernel in the archive
+        kernel: [ga, hwe]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' |
+            sudo tee /etc/udev/rules.d/99-kvm4all.rules >/dev/null
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Build and test
+        env:
+          KERNEL: ${{ matrix.kernel }}
+          UPSTREAM_REF: ${{ inputs.upstream_ref || 'master' }}
+          TESTS: ${{ inputs.tests || '1 2 3 4 5' }}
+        run: |
+          src/tests/vm/run.sh --kernel "$KERNEL" --upstream-ref "$UPSTREAM_REF" \
+            --tests "$TESTS" --work vm-work --report "report-$KERNEL.md"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-${{ matrix.kernel }}
+          path: |
+            report-*.md
+            report-*.json
+            vm-work/console-*.log
+            vm-work/build-*/*/build.log
+          if-no-files-found: ignore
+
+  report:
+    name: Report
+    needs: test
+    if: always()
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    concurrency:
+      group: compat-pages
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: results
+
+      - name: Summary
+        run: |
+          shopt -s nullglob
+          files=(results/*/report-*.json)
+          if [ ${#files[@]} = 0 ]; then
+            echo "No results: see the test jobs." >> "$GITHUB_STEP_SUMMARY"
+          else
+            python3 src/tests/vm/report.py markdown "${files[@]}" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Publish to GitHub Pages
+        if: github.ref == 'refs/heads/master' && github.event_name != 'pull_request'
+        env:
+          RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          shopt -s nullglob
+          files=(results/*/report-*.json)
+          [ ${#files[@]} -gt 0 ] || { echo "nothing to publish"; exit 0; }
+          url="https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/"
+          if git ls-remote --exit-code --heads origin gh-pages >/dev/null; then
+            git fetch -q --depth 1 origin gh-pages
+            git worktree add -q site FETCH_HEAD
+          else
+            git worktree add -q --detach site
+            (cd site && git checkout -q --orphan gh-pages && git rm -rqf .)
+          fi
+          python3 src/tests/vm/report.py site --site site --run-id "$RUN_ID" --url "$url" \
+            "${files[@]}" --logs results/*/vm-work/console-*.log
+          cd site
+          git add -A
+          git -c user.name='github-actions[bot]' \
+              -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+              commit -q -m "Compatibility report for ${GITHUB_SHA::7}"
+          git push -q origin HEAD:gh-pages
+          echo "Published: $url" >> "$GITHUB_STEP_SUMMARY"
