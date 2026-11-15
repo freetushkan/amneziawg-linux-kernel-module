@@ -175,14 +175,30 @@ ping_until() { # $1 = netns, $2 = address, $3 = seconds
 	return 1
 }
 
+# Upstream clients with RandomTrailers drop a share of the server's
+# handshake responses (see KNOWN below), so allow several attempts.
+reach_all() { # $1 = from netns or "", $2 = seconds; results in /tmp/r.$c
+	local c pids=
+	for c in $CLIENTS; do
+		if [ -n "$1" ]; then
+			( ping_until $1 10.0.0.${idx[$c]} $2 && echo ok > /tmp/r.$c || echo no > /tmp/r.$c ) &
+		else
+			( ping_until $c 10.0.0.1 $2 && echo ok > /tmp/r.$c || echo no > /tmp/r.$c ) &
+		fi
+		pids="$pids $!"
+	done
+	wait $pids
+}
+
 echo 1 > $PARAM
 
 if want 1; then
 echo "1. Client-initiated handshakes"
 setup_server
 mark=$(dmesg | wc -l)
+reach_all "" 45
 for c in $CLIENTS; do
-	if ping_until $c 10.0.0.1 30; then pass "$c reaches the server"; else fail "$c cannot reach the server"; fi
+	if [ "$(cat /tmp/r.$c)" = ok ]; then pass "$c reaches the server"; else fail "$c cannot reach the server"; fi
 done
 check_logs $mark
 
@@ -212,12 +228,7 @@ echo "3. Server-initiated handshakes to unknown peers (compat=2)"
 echo 2 > $PARAM
 setup_server endpoints
 mark=$(dmesg | wc -l)
-pids=
-for c in $CLIENTS; do
-	( ping_until srv 10.0.0.${idx[$c]} 60 && echo ok > /tmp/r.$c || echo no > /tmp/r.$c ) &
-	pids="$pids $!"
-done
-wait $pids
+reach_all srv 60
 for c in $CLIENTS; do
 	if [ "$(cat /tmp/r.$c)" = ok ]; then pass "server reaches $c"; else fail "server cannot reach $c"; fi
 done
@@ -233,8 +244,9 @@ for c in $CLIENTS; do	# drop the clients' sessions
 	n $c ip link set awg$c down
 	n $c ip link set awg$c up
 done
+reach_all "" 45
 for c in $CLIENTS; do
-	if ping_until $c 10.0.0.1 8; then r=ok; else r=no; fi
+	r=$(cat /tmp/r.$c)
 	if [ $c = c3 ]; then want=ok; else want=no; fi
 	if [ $r = $want ]; then pass "$c: $([ $r = ok ] && echo connects || echo rejected)"; else fail "$c: got $r, expected $want"; fi
 done
