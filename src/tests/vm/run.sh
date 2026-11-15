@@ -24,7 +24,8 @@
 #     --tools URL       amneziawg-tools repository
 #     --tools-ref R     (default: master)
 #     --work DIR        build directory (default: ./vm-work)
-#     --report FILE     markdown report (default: DIR/report.md)
+#     --report FILE     markdown report (default: DIR/report.md); the
+#                       results go to the same name with .json
 #     --tests "1 2 .."  subset of compat.sh tests
 #     --no-deps         do not install packages
 #
@@ -236,57 +237,16 @@ took=$((SECONDS - start))
 
 # ------------------------------------------------------------------ report
 
-section() { sed -n "/^@@ BEGIN $1\$/,/^@@ END $1/p" "$LOG" | sed '1d;$d'; }
-count() { grep -c "^  $2 " <<<"$1" || true; }
-
+RESULTS=${REPORT%.md}.json
 status=0
-{
-	echo "### Kernel \`$K\`"
-	echo
-	echo "- this tree: \`$OWN_COMMIT\`"
-	echo "- strict clients: upstream \`$UP_COMMIT\`"
-	echo "- awg tools: \`$TOOLS_COMMIT\`"
-	echo "- VM: $([ -w /dev/kvm ] && echo KVM || echo TCG), ${took}s"
-	echo
-	echo "| clients | passed | failed | known upstream issues | result |"
-	echo "|---|---|---|---|---|"
-	for mode in strict own; do
-		out=$(section $mode)
-		p=$(count "$out" PASS); f=$(count "$out" FAIL); k=$(count "$out" KNOWN)
-		if [ $((p + f + k)) = 0 ]; then r="❌ no results"; status=1
-		elif grep -q "^@@ END $mode rc=0" "$LOG"; then r="✅"
-		elif grep -q "^@@ END $mode" "$LOG"; then r="❌"; status=1
-		else r="❌ did not finish"; status=1
-		fi
-		echo "| $([ $mode = strict ] && echo "upstream module" || echo "this module") | $p | $f | $k | $r |"
-	done
-	for mode in strict own; do
-		bad=$(section $mode | grep -E "^  (FAIL|KNOWN) " || true)
-		[ -n "$bad" ] || continue
-		echo
-		echo "<details><summary>$mode: failures and known issues</summary>"
-		echo
-		echo '```'
-		echo "$bad"
-		echo '```'
-		echo "</details>"
-	done
-	if grep -q "^@@ insmod" "$LOG"; then
-		echo; echo "Module load errors:"; echo '```'; grep "^@@ insmod" "$LOG"; echo '```'
-		status=1
-	fi
-	# Signatures of a kernel problem, not every line that says "warning"
-	# (CPU mitigation notices, module taint messages).
-	oops='WARNING: CPU|------------\[ cut here \]|BUG:|Oops|Call Trace|general protection fault|KASAN|refcount_t:|list_(add|del) corruption'
-	if section dmesg | grep -qE "$oops"; then
-		echo; echo "**Kernel warnings:**"; echo '```'
-		section dmesg | grep -E -A12 "$oops" | head -n 80
-		echo '```'
-		status=1
-	fi
-	echo
-} > "$REPORT"
-
+python3 "$HERE/report.py" collect --log "$LOG" --kernel "$K" --out "$RESULTS" \
+	--meta "tree=$OWN_COMMIT" --meta "sha=$(git -C "$SRC" rev-parse HEAD 2>/dev/null || echo)" \
+	--meta "upstream=$UP_COMMIT" --meta "tools=$TOOLS_COMMIT" \
+	--meta "vm=$([ -w /dev/kvm ] && echo KVM || echo TCG)" --meta "seconds=$took" \
+	--meta "repo=${GITHUB_REPOSITORY:-}" \
+	--meta "run_url=${GITHUB_RUN_ID:+${GITHUB_SERVER_URL:-https://github.com}/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID}" ||
+	status=1
+python3 "$HERE/report.py" markdown "$RESULTS" > "$REPORT"
 cat "$REPORT"
-log "Console log: $LOG"
+log "Results: $RESULTS, console log: $LOG"
 exit $status

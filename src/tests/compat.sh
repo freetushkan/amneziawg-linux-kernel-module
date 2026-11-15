@@ -44,9 +44,12 @@ CLIENTS=${CLIENTS:-"c3 c3nohp c2 c2nos c1 wg"}
 TESTS=${TESTS:-"1 2 3 4 5"}
 want() { [[ " $TESTS " == *" $1 "* ]]; }
 failed=0
-pass() { printf '  \e[32mPASS\e[0m %s\n' "$*"; }
-known() { printf '  \e[33mKNOWN\e[0m %s\n' "$*"; }
-fail() { printf '  \e[31mFAIL\e[0m %s\n' "$*"; failed=1; }
+# Every check has a key (test.check[.client]); besides the line for people,
+# "@@R key status detail" is printed for src/tests/vm/report.py.
+result() { printf '@@R %s %s %s\n' "$1" "$2" "$3"; }
+pass() { printf '  \e[32mPASS\e[0m %s\n' "$2"; result "$1" pass "$2"; }
+known() { printf '  \e[33mKNOWN\e[0m %s\n' "$2"; result "$1" known "$2"; }
+fail() { printf '  \e[31mFAIL\e[0m %s\n' "$2"; result "$1" fail "$2"; failed=1; }
 n() { ip netns exec "$@"; }
 
 cleanup() {
@@ -92,6 +95,18 @@ device_conf() { # $1 = generation
 		"$JUNK" "$S" ${H1%-*} ${H2%-*} ${H3%-*} ${H4%-*} ;;
 	esac
 }
+
+describe_client() { # what each emulated generation uses, for the report
+	case $1 in
+	c3) echo "AmneziaWG 3.x|header protection, random trailers, content padding, S1-S4, H ranges" ;;
+	c3nohp) echo "AmneziaWG 3.x, no HeaderProtectionKey|random trailers, content padding, S1-S4, H ranges" ;;
+	c2) echo "AmneziaWG 2.x|S1-S4, H ranges" ;;
+	c2nos) echo "AmneziaWG 2.x, no S3/S4|S1/S2, H ranges" ;;
+	c1) echo "AmneziaWG 1.x|S1/S2, fixed H (range low bounds)" ;;
+	wg) echo "WireGuard|in-tree wireguard.ko" ;;
+	esac
+}
+for c in $CLIENTS; do printf '@@C %s %s\n' $c "$(describe_client $c)"; done
 
 setup_server() { # $1 = with client endpoints
 	n srv ip link del awgs 2>/dev/null || true
@@ -147,23 +162,23 @@ expect_proto() { # $1 = client, prints the expected log suffix
 	esac
 }
 
-check_logs() { # $1 = dmesg offset (lines)
+check_logs() { # $1 = dmesg offset (lines), $2 = test number
 	local log c want got
 	log=$(dmesg | tail -n +$(($1 + 1)))
 	for c in $CLIENTS; do
 		want=$(expect_proto $c)
 		got=$(echo "$log" | grep "awgs: peer .* (192.168.${idx[$c]}.2:" | tail -1 | sed 's/.* speaks //')
 		if [ "$got" = "$want" ]; then
-			pass "server sees $c as '${want:-full protocol}'"
+			pass t$2.detect.$c "server sees $c as '${want:-full protocol}'"
 		else
-			fail "server sees $c as '$got', expected '$want'"
+			fail t$2.detect.$c "server sees $c as '$got', expected '$want'"
 		fi
 	done
 	if echo "$log" | grep -E "awgc[0-9a-z]+: peer .* speaks" >/dev/null; then
-		fail "a client saw the server fall back:"
+		fail t$2.own_format "a client saw the server fall back"
 		echo "$log" | grep -E "awgc[0-9a-z]+: peer .* speaks"
 	else
-		pass "every client got answers in its own format"
+		pass t$2.own_format "every client got answers in its own format"
 	fi
 }
 
@@ -191,14 +206,14 @@ reach_all() { # $1 = from netns or "", $2 = seconds; results in /tmp/r.$c
 echo 1 > $PARAM
 
 if want 1; then
-echo "1. Client-initiated handshakes"
+echo "1. Client-initiated handshakes"; T=1
 setup_server
 mark=$(dmesg | wc -l)
 reach_all "" 45
 for c in $CLIENTS; do
-	if [ "$(cat /tmp/r.$c)" = ok ]; then pass "$c reaches the server"; else fail "$c cannot reach the server"; fi
+	if [ "$(cat /tmp/r.$c)" = ok ]; then pass t1.connect.$c "$c reaches the server"; else fail t1.connect.$c "$c cannot reach the server"; fi
 done
-check_logs $mark
+check_logs $mark $T
 
 fi
 
@@ -207,30 +222,30 @@ echo "2. No loss with ambiguous transport headers"
 for c in $CLIENTS; do
 	loss=$(n $c ping -q -c 300 -i 0.01 -s 1000 10.0.0.1 | sed -n 's/.* \([0-9.]*\)% packet loss.*/\1/p')
 	if [ "$loss" = "0" ]; then
-		pass "$c: 300 pings, 0% loss"
+		pass t2.loss.$c "$c: 300 pings, 0% loss"
 	elif [ $CLIENT_KIND != amneziawg ] && [[ $c == c3* ]]; then
 		# Upstream itself tests a transport packet as an initiation and a
 		# response first when RandomTrailers is on, so with wide H1/H2 it
 		# drops a share of the server's packets. Fixed on this side by
 		# "receive: resolve packets that fit more than one shape".
-		known "$c: ${loss}% loss in the upstream client (RandomTrailers + wide H1/H2)"
+		known t2.loss.$c "$c: ${loss}% loss in the upstream client (RandomTrailers + wide H1/H2)"
 	else
-		fail "$c: ${loss:-?}% loss"
+		fail t2.loss.$c "$c: ${loss:-?}% loss"
 	fi
 done
 
 fi
 
 if want 3; then
-echo "3. Server-initiated handshakes to unknown peers (compat=2)"
+echo "3. Server-initiated handshakes to unknown peers (compat=2)"; T=3
 echo 2 > $PARAM
 setup_server endpoints
 mark=$(dmesg | wc -l)
 reach_all srv 60
 for c in $CLIENTS; do
-	if [ "$(cat /tmp/r.$c)" = ok ]; then pass "server reaches $c"; else fail "server cannot reach $c"; fi
+	if [ "$(cat /tmp/r.$c)" = ok ]; then pass t3.reach.$c "server reaches $c"; else fail t3.reach.$c "server cannot reach $c"; fi
 done
-check_logs $mark
+check_logs $mark $T
 
 fi
 
@@ -246,7 +261,7 @@ reach_all "" 45
 for c in $CLIENTS; do
 	r=$(cat /tmp/r.$c)
 	if [ $c = c3 ]; then want=ok; else want=no; fi
-	if [ $r = $want ]; then pass "$c: $([ $r = ok ] && echo connects || echo rejected)"; else fail "$c: got $r, expected $want"; fi
+	if [ $r = $want ]; then pass t4.$c "$c: $([ $r = ok ] && echo connects || echo rejected)"; else fail t4.$c "$c: got $r, expected $want"; fi
 done
 echo 1 > $PARAM
 fi
@@ -276,10 +291,10 @@ n srv ip link set awgs down	# the client starts while the server is down,
 sleep 17			# probes older formats,
 n srv ip link set awgs up	# and the server comes back
 wait
-if [ "$(cat /tmp/r.smart)" = ok ]; then pass "client reaches the restarted server"; else fail "client cannot reach the restarted server"; fi
+if [ "$(cat /tmp/r.smart)" = ok ]; then pass t5.reach "client reaches the restarted server"; else fail t5.reach "client cannot reach the restarted server"; fi
 n smart ping -q -c 50 -i 0.02 10.0.0.1 >/dev/null 2>&1 || true
 log=$(dmesg | tail -n +$((mark + 1)) | grep -E "awgp: peer|awgs: peer .*192.168.20.2:" | grep -v "as configured" || true)
-if [ -z "$log" ]; then pass "both sides use the full protocol"; else fail "fallback stuck:"; echo "$log"; fi
+if [ -z "$log" ]; then pass t5.full "both sides use the full protocol"; else fail t5.full "fallback stuck"; echo "$log"; fi
 fi
 
 [ $failed = 0 ] && echo "ALL PASSED" || echo "SOME TESTS FAILED"
