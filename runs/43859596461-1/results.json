@@ -1,0 +1,752 @@
+[
+ {
+  "kernel": "6.8.0-149-generic",
+  "modes": {
+   "strict": {
+    "results": {
+     "t1.connect.c3": {
+      "status": "pass",
+      "detail": "c3 reaches the server"
+     },
+     "t1.connect.c3nohp": {
+      "status": "pass",
+      "detail": "c3nohp reaches the server"
+     },
+     "t1.connect.c2": {
+      "status": "pass",
+      "detail": "c2 reaches the server"
+     },
+     "t1.connect.c2nos": {
+      "status": "pass",
+      "detail": "c2nos reaches the server"
+     },
+     "t1.connect.c1": {
+      "status": "pass",
+      "detail": "c1 reaches the server"
+     },
+     "t1.connect.wg": {
+      "status": "pass",
+      "detail": "wg reaches the server"
+     },
+     "t1.detect.c3": {
+      "status": "pass",
+      "detail": "server sees c3 as 'full protocol'"
+     },
+     "t1.detect.c3nohp": {
+      "status": "pass",
+      "detail": "server sees c3nohp as 'AmneziaWG 3.x without header protection'"
+     },
+     "t1.detect.c2": {
+      "status": "pass",
+      "detail": "server sees c2 as 'AmneziaWG 2.x'"
+     },
+     "t1.detect.c2nos": {
+      "status": "pass",
+      "detail": "server sees c2nos as 'AmneziaWG 2.x without S3/S4'"
+     },
+     "t1.detect.c1": {
+      "status": "pass",
+      "detail": "server sees c1 as 'AmneziaWG 1.x'"
+     },
+     "t1.detect.wg": {
+      "status": "pass",
+      "detail": "server sees wg as 'WireGuard'"
+     },
+     "t1.own_format": {
+      "status": "pass",
+      "detail": "every client got answers in its own format"
+     },
+     "t2.loss.c3": {
+      "status": "known",
+      "detail": "c3: 40.3333% loss in the upstream client (RandomTrailers + wide H1/H2)"
+     },
+     "t2.loss.c3nohp": {
+      "status": "known",
+      "detail": "c3nohp: 38.3333% loss in the upstream client (RandomTrailers + wide H1/H2)"
+     },
+     "t2.loss.c2": {
+      "status": "pass",
+      "detail": "c2: 300 pings, 0% loss"
+     },
+     "t2.loss.c2nos": {
+      "status": "pass",
+      "detail": "c2nos: 300 pings, 0% loss"
+     },
+     "t2.loss.c1": {
+      "status": "pass",
+      "detail": "c1: 300 pings, 0% loss"
+     },
+     "t2.loss.wg": {
+      "status": "pass",
+      "detail": "wg: 300 pings, 0% loss"
+     },
+     "t3.reach.c3": {
+      "status": "pass",
+      "detail": "server reaches c3"
+     },
+     "t3.reach.c3nohp": {
+      "status": "pass",
+      "detail": "server reaches c3nohp"
+     },
+     "t3.reach.c2": {
+      "status": "pass",
+      "detail": "server reaches c2"
+     },
+     "t3.reach.c2nos": {
+      "status": "pass",
+      "detail": "server reaches c2nos"
+     },
+     "t3.reach.c1": {
+      "status": "pass",
+      "detail": "server reaches c1"
+     },
+     "t3.reach.wg": {
+      "status": "pass",
+      "detail": "server reaches wg"
+     },
+     "t3.detect.c3": {
+      "status": "pass",
+      "detail": "server sees c3 as 'full protocol'"
+     },
+     "t3.detect.c3nohp": {
+      "status": "pass",
+      "detail": "server sees c3nohp as 'AmneziaWG 3.x without header protection'"
+     },
+     "t3.detect.c2": {
+      "status": "pass",
+      "detail": "server sees c2 as 'AmneziaWG 2.x'"
+     },
+     "t3.detect.c2nos": {
+      "status": "pass",
+      "detail": "server sees c2nos as 'AmneziaWG 2.x without S3/S4'"
+     },
+     "t3.detect.c1": {
+      "status": "pass",
+      "detail": "server sees c1 as 'AmneziaWG 1.x'"
+     },
+     "t3.detect.wg": {
+      "status": "pass",
+      "detail": "server sees wg as 'WireGuard'"
+     },
+     "t3.own_format": {
+      "status": "pass",
+      "detail": "every client got answers in its own format"
+     },
+     "t4.c3": {
+      "status": "pass",
+      "detail": "c3: connects"
+     },
+     "t4.c3nohp": {
+      "status": "pass",
+      "detail": "c3nohp: rejected"
+     },
+     "t4.c2": {
+      "status": "pass",
+      "detail": "c2: rejected"
+     },
+     "t4.c2nos": {
+      "status": "pass",
+      "detail": "c2nos: rejected"
+     },
+     "t4.c1": {
+      "status": "pass",
+      "detail": "c1: rejected"
+     },
+     "t4.wg": {
+      "status": "pass",
+      "detail": "wg: rejected"
+     },
+     "t5.reach": {
+      "status": "pass",
+      "detail": "client reaches the restarted server"
+     },
+     "t5.full": {
+      "status": "pass",
+      "detail": "both sides use the full protocol"
+     }
+    },
+    "finished": true,
+    "rc": 0
+   },
+   "own": {
+    "results": {
+     "t1.connect.c3": {
+      "status": "pass",
+      "detail": "c3 reaches the server"
+     },
+     "t1.connect.c3nohp": {
+      "status": "pass",
+      "detail": "c3nohp reaches the server"
+     },
+     "t1.connect.c2": {
+      "status": "pass",
+      "detail": "c2 reaches the server"
+     },
+     "t1.connect.c2nos": {
+      "status": "pass",
+      "detail": "c2nos reaches the server"
+     },
+     "t1.connect.c1": {
+      "status": "pass",
+      "detail": "c1 reaches the server"
+     },
+     "t1.connect.wg": {
+      "status": "pass",
+      "detail": "wg reaches the server"
+     },
+     "t1.detect.c3": {
+      "status": "pass",
+      "detail": "server sees c3 as 'full protocol'"
+     },
+     "t1.detect.c3nohp": {
+      "status": "pass",
+      "detail": "server sees c3nohp as 'AmneziaWG 3.x without header protection'"
+     },
+     "t1.detect.c2": {
+      "status": "pass",
+      "detail": "server sees c2 as 'AmneziaWG 2.x'"
+     },
+     "t1.detect.c2nos": {
+      "status": "pass",
+      "detail": "server sees c2nos as 'AmneziaWG 2.x without S3/S4'"
+     },
+     "t1.detect.c1": {
+      "status": "pass",
+      "detail": "server sees c1 as 'AmneziaWG 1.x'"
+     },
+     "t1.detect.wg": {
+      "status": "pass",
+      "detail": "server sees wg as 'WireGuard'"
+     },
+     "t1.own_format": {
+      "status": "pass",
+      "detail": "every client got answers in its own format"
+     },
+     "t2.loss.c3": {
+      "status": "pass",
+      "detail": "c3: 300 pings, 0% loss"
+     },
+     "t2.loss.c3nohp": {
+      "status": "pass",
+      "detail": "c3nohp: 300 pings, 0% loss"
+     },
+     "t2.loss.c2": {
+      "status": "pass",
+      "detail": "c2: 300 pings, 0% loss"
+     },
+     "t2.loss.c2nos": {
+      "status": "pass",
+      "detail": "c2nos: 300 pings, 0% loss"
+     },
+     "t2.loss.c1": {
+      "status": "pass",
+      "detail": "c1: 300 pings, 0% loss"
+     },
+     "t2.loss.wg": {
+      "status": "pass",
+      "detail": "wg: 300 pings, 0% loss"
+     },
+     "t3.reach.c3": {
+      "status": "pass",
+      "detail": "server reaches c3"
+     },
+     "t3.reach.c3nohp": {
+      "status": "pass",
+      "detail": "server reaches c3nohp"
+     },
+     "t3.reach.c2": {
+      "status": "pass",
+      "detail": "server reaches c2"
+     },
+     "t3.reach.c2nos": {
+      "status": "pass",
+      "detail": "server reaches c2nos"
+     },
+     "t3.reach.c1": {
+      "status": "pass",
+      "detail": "server reaches c1"
+     },
+     "t3.reach.wg": {
+      "status": "pass",
+      "detail": "server reaches wg"
+     },
+     "t3.detect.c3": {
+      "status": "pass",
+      "detail": "server sees c3 as 'full protocol'"
+     },
+     "t3.detect.c3nohp": {
+      "status": "pass",
+      "detail": "server sees c3nohp as 'AmneziaWG 3.x without header protection'"
+     },
+     "t3.detect.c2": {
+      "status": "pass",
+      "detail": "server sees c2 as 'AmneziaWG 2.x'"
+     },
+     "t3.detect.c2nos": {
+      "status": "pass",
+      "detail": "server sees c2nos as 'AmneziaWG 2.x without S3/S4'"
+     },
+     "t3.detect.c1": {
+      "status": "pass",
+      "detail": "server sees c1 as 'AmneziaWG 1.x'"
+     },
+     "t3.detect.wg": {
+      "status": "pass",
+      "detail": "server sees wg as 'WireGuard'"
+     },
+     "t3.own_format": {
+      "status": "pass",
+      "detail": "every client got answers in its own format"
+     },
+     "t4.c3": {
+      "status": "pass",
+      "detail": "c3: connects"
+     },
+     "t4.c3nohp": {
+      "status": "pass",
+      "detail": "c3nohp: rejected"
+     },
+     "t4.c2": {
+      "status": "pass",
+      "detail": "c2: rejected"
+     },
+     "t4.c2nos": {
+      "status": "pass",
+      "detail": "c2nos: rejected"
+     },
+     "t4.c1": {
+      "status": "pass",
+      "detail": "c1: rejected"
+     },
+     "t4.wg": {
+      "status": "pass",
+      "detail": "wg: rejected"
+     },
+     "t5.reach": {
+      "status": "pass",
+      "detail": "client reaches the restarted server"
+     },
+     "t5.full": {
+      "status": "pass",
+      "detail": "both sides use the full protocol"
+     }
+    },
+    "finished": true,
+    "rc": 0
+   }
+  },
+  "clients": {
+   "c3": {
+    "title": "AmneziaWG 3.x",
+    "details": "header protection, random trailers, content padding, S1-S4, H ranges"
+   },
+   "c3nohp": {
+    "title": "AmneziaWG 3.x, no HeaderProtectionKey",
+    "details": "random trailers, content padding, S1-S4, H ranges"
+   },
+   "c2": {
+    "title": "AmneziaWG 2.x",
+    "details": "S1-S4, H ranges"
+   },
+   "c2nos": {
+    "title": "AmneziaWG 2.x, no S3/S4",
+    "details": "S1/S2, H ranges"
+   },
+   "c1": {
+    "title": "AmneziaWG 1.x",
+    "details": "S1/S2, fixed H (range low bounds)"
+   },
+   "wg": {
+    "title": "WireGuard",
+    "details": "in-tree wireguard.ko"
+   }
+  },
+  "problems": [],
+  "load_errors": [],
+  "tree": "8b64e15",
+  "sha": "8b64e15dc323f232f9c45138485cfbf441de2a0e",
+  "upstream": "63ed35d chore: bump version",
+  "tools": "ee0f0a9",
+  "vm": "KVM",
+  "seconds": "217",
+  "repo": "freetushkan/amneziawg-linux-kernel-module",
+  "run_url": "https://github.com/freetushkan/amneziawg-linux-kernel-module/actions/runs/43859596461",
+  "ok": true,
+  "date": "2026-11-16 11:44 UTC"
+ },
+ {
+  "kernel": "7.0.0-43-generic",
+  "modes": {
+   "strict": {
+    "results": {
+     "t1.connect.c3": {
+      "status": "pass",
+      "detail": "c3 reaches the server"
+     },
+     "t1.connect.c3nohp": {
+      "status": "pass",
+      "detail": "c3nohp reaches the server"
+     },
+     "t1.connect.c2": {
+      "status": "pass",
+      "detail": "c2 reaches the server"
+     },
+     "t1.connect.c2nos": {
+      "status": "pass",
+      "detail": "c2nos reaches the server"
+     },
+     "t1.connect.c1": {
+      "status": "pass",
+      "detail": "c1 reaches the server"
+     },
+     "t1.connect.wg": {
+      "status": "pass",
+      "detail": "wg reaches the server"
+     },
+     "t1.detect.c3": {
+      "status": "pass",
+      "detail": "server sees c3 as 'full protocol'"
+     },
+     "t1.detect.c3nohp": {
+      "status": "pass",
+      "detail": "server sees c3nohp as 'AmneziaWG 3.x without header protection'"
+     },
+     "t1.detect.c2": {
+      "status": "pass",
+      "detail": "server sees c2 as 'AmneziaWG 2.x'"
+     },
+     "t1.detect.c2nos": {
+      "status": "pass",
+      "detail": "server sees c2nos as 'AmneziaWG 2.x without S3/S4'"
+     },
+     "t1.detect.c1": {
+      "status": "pass",
+      "detail": "server sees c1 as 'AmneziaWG 1.x'"
+     },
+     "t1.detect.wg": {
+      "status": "pass",
+      "detail": "server sees wg as 'WireGuard'"
+     },
+     "t1.own_format": {
+      "status": "pass",
+      "detail": "every client got answers in its own format"
+     },
+     "t2.loss.c3": {
+      "status": "known",
+      "detail": "c3: 38% loss in the upstream client (RandomTrailers + wide H1/H2)"
+     },
+     "t2.loss.c3nohp": {
+      "status": "known",
+      "detail": "c3nohp: 43% loss in the upstream client (RandomTrailers + wide H1/H2)"
+     },
+     "t2.loss.c2": {
+      "status": "pass",
+      "detail": "c2: 300 pings, 0% loss"
+     },
+     "t2.loss.c2nos": {
+      "status": "pass",
+      "detail": "c2nos: 300 pings, 0% loss"
+     },
+     "t2.loss.c1": {
+      "status": "pass",
+      "detail": "c1: 300 pings, 0% loss"
+     },
+     "t2.loss.wg": {
+      "status": "pass",
+      "detail": "wg: 300 pings, 0% loss"
+     },
+     "t3.reach.c3": {
+      "status": "pass",
+      "detail": "server reaches c3"
+     },
+     "t3.reach.c3nohp": {
+      "status": "pass",
+      "detail": "server reaches c3nohp"
+     },
+     "t3.reach.c2": {
+      "status": "pass",
+      "detail": "server reaches c2"
+     },
+     "t3.reach.c2nos": {
+      "status": "pass",
+      "detail": "server reaches c2nos"
+     },
+     "t3.reach.c1": {
+      "status": "pass",
+      "detail": "server reaches c1"
+     },
+     "t3.reach.wg": {
+      "status": "pass",
+      "detail": "server reaches wg"
+     },
+     "t3.detect.c3": {
+      "status": "pass",
+      "detail": "server sees c3 as 'full protocol'"
+     },
+     "t3.detect.c3nohp": {
+      "status": "pass",
+      "detail": "server sees c3nohp as 'AmneziaWG 3.x without header protection'"
+     },
+     "t3.detect.c2": {
+      "status": "pass",
+      "detail": "server sees c2 as 'AmneziaWG 2.x'"
+     },
+     "t3.detect.c2nos": {
+      "status": "pass",
+      "detail": "server sees c2nos as 'AmneziaWG 2.x without S3/S4'"
+     },
+     "t3.detect.c1": {
+      "status": "pass",
+      "detail": "server sees c1 as 'AmneziaWG 1.x'"
+     },
+     "t3.detect.wg": {
+      "status": "pass",
+      "detail": "server sees wg as 'WireGuard'"
+     },
+     "t3.own_format": {
+      "status": "pass",
+      "detail": "every client got answers in its own format"
+     },
+     "t4.c3": {
+      "status": "pass",
+      "detail": "c3: connects"
+     },
+     "t4.c3nohp": {
+      "status": "pass",
+      "detail": "c3nohp: rejected"
+     },
+     "t4.c2": {
+      "status": "pass",
+      "detail": "c2: rejected"
+     },
+     "t4.c2nos": {
+      "status": "pass",
+      "detail": "c2nos: rejected"
+     },
+     "t4.c1": {
+      "status": "pass",
+      "detail": "c1: rejected"
+     },
+     "t4.wg": {
+      "status": "pass",
+      "detail": "wg: rejected"
+     },
+     "t5.reach": {
+      "status": "pass",
+      "detail": "client reaches the restarted server"
+     },
+     "t5.full": {
+      "status": "pass",
+      "detail": "both sides use the full protocol"
+     }
+    },
+    "finished": true,
+    "rc": 0
+   },
+   "own": {
+    "results": {
+     "t1.connect.c3": {
+      "status": "pass",
+      "detail": "c3 reaches the server"
+     },
+     "t1.connect.c3nohp": {
+      "status": "pass",
+      "detail": "c3nohp reaches the server"
+     },
+     "t1.connect.c2": {
+      "status": "pass",
+      "detail": "c2 reaches the server"
+     },
+     "t1.connect.c2nos": {
+      "status": "pass",
+      "detail": "c2nos reaches the server"
+     },
+     "t1.connect.c1": {
+      "status": "pass",
+      "detail": "c1 reaches the server"
+     },
+     "t1.connect.wg": {
+      "status": "pass",
+      "detail": "wg reaches the server"
+     },
+     "t1.detect.c3": {
+      "status": "pass",
+      "detail": "server sees c3 as 'full protocol'"
+     },
+     "t1.detect.c3nohp": {
+      "status": "pass",
+      "detail": "server sees c3nohp as 'AmneziaWG 3.x without header protection'"
+     },
+     "t1.detect.c2": {
+      "status": "pass",
+      "detail": "server sees c2 as 'AmneziaWG 2.x'"
+     },
+     "t1.detect.c2nos": {
+      "status": "pass",
+      "detail": "server sees c2nos as 'AmneziaWG 2.x without S3/S4'"
+     },
+     "t1.detect.c1": {
+      "status": "pass",
+      "detail": "server sees c1 as 'AmneziaWG 1.x'"
+     },
+     "t1.detect.wg": {
+      "status": "pass",
+      "detail": "server sees wg as 'WireGuard'"
+     },
+     "t1.own_format": {
+      "status": "pass",
+      "detail": "every client got answers in its own format"
+     },
+     "t2.loss.c3": {
+      "status": "pass",
+      "detail": "c3: 300 pings, 0% loss"
+     },
+     "t2.loss.c3nohp": {
+      "status": "pass",
+      "detail": "c3nohp: 300 pings, 0% loss"
+     },
+     "t2.loss.c2": {
+      "status": "pass",
+      "detail": "c2: 300 pings, 0% loss"
+     },
+     "t2.loss.c2nos": {
+      "status": "pass",
+      "detail": "c2nos: 300 pings, 0% loss"
+     },
+     "t2.loss.c1": {
+      "status": "pass",
+      "detail": "c1: 300 pings, 0% loss"
+     },
+     "t2.loss.wg": {
+      "status": "pass",
+      "detail": "wg: 300 pings, 0% loss"
+     },
+     "t3.reach.c3": {
+      "status": "pass",
+      "detail": "server reaches c3"
+     },
+     "t3.reach.c3nohp": {
+      "status": "pass",
+      "detail": "server reaches c3nohp"
+     },
+     "t3.reach.c2": {
+      "status": "pass",
+      "detail": "server reaches c2"
+     },
+     "t3.reach.c2nos": {
+      "status": "pass",
+      "detail": "server reaches c2nos"
+     },
+     "t3.reach.c1": {
+      "status": "pass",
+      "detail": "server reaches c1"
+     },
+     "t3.reach.wg": {
+      "status": "pass",
+      "detail": "server reaches wg"
+     },
+     "t3.detect.c3": {
+      "status": "pass",
+      "detail": "server sees c3 as 'full protocol'"
+     },
+     "t3.detect.c3nohp": {
+      "status": "pass",
+      "detail": "server sees c3nohp as 'AmneziaWG 3.x without header protection'"
+     },
+     "t3.detect.c2": {
+      "status": "pass",
+      "detail": "server sees c2 as 'AmneziaWG 2.x'"
+     },
+     "t3.detect.c2nos": {
+      "status": "pass",
+      "detail": "server sees c2nos as 'AmneziaWG 2.x without S3/S4'"
+     },
+     "t3.detect.c1": {
+      "status": "pass",
+      "detail": "server sees c1 as 'AmneziaWG 1.x'"
+     },
+     "t3.detect.wg": {
+      "status": "pass",
+      "detail": "server sees wg as 'WireGuard'"
+     },
+     "t3.own_format": {
+      "status": "pass",
+      "detail": "every client got answers in its own format"
+     },
+     "t4.c3": {
+      "status": "pass",
+      "detail": "c3: connects"
+     },
+     "t4.c3nohp": {
+      "status": "pass",
+      "detail": "c3nohp: rejected"
+     },
+     "t4.c2": {
+      "status": "pass",
+      "detail": "c2: rejected"
+     },
+     "t4.c2nos": {
+      "status": "pass",
+      "detail": "c2nos: rejected"
+     },
+     "t4.c1": {
+      "status": "pass",
+      "detail": "c1: rejected"
+     },
+     "t4.wg": {
+      "status": "pass",
+      "detail": "wg: rejected"
+     },
+     "t5.reach": {
+      "status": "pass",
+      "detail": "client reaches the restarted server"
+     },
+     "t5.full": {
+      "status": "pass",
+      "detail": "both sides use the full protocol"
+     }
+    },
+    "finished": true,
+    "rc": 0
+   }
+  },
+  "clients": {
+   "c3": {
+    "title": "AmneziaWG 3.x",
+    "details": "header protection, random trailers, content padding, S1-S4, H ranges"
+   },
+   "c3nohp": {
+    "title": "AmneziaWG 3.x, no HeaderProtectionKey",
+    "details": "random trailers, content padding, S1-S4, H ranges"
+   },
+   "c2": {
+    "title": "AmneziaWG 2.x",
+    "details": "S1-S4, H ranges"
+   },
+   "c2nos": {
+    "title": "AmneziaWG 2.x, no S3/S4",
+    "details": "S1/S2, H ranges"
+   },
+   "c1": {
+    "title": "AmneziaWG 1.x",
+    "details": "S1/S2, fixed H (range low bounds)"
+   },
+   "wg": {
+    "title": "WireGuard",
+    "details": "in-tree wireguard.ko"
+   }
+  },
+  "problems": [],
+  "load_errors": [],
+  "tree": "8b64e15",
+  "sha": "8b64e15dc323f232f9c45138485cfbf441de2a0e",
+  "upstream": "63ed35d chore: bump version",
+  "tools": "ee0f0a9",
+  "vm": "KVM",
+  "seconds": "217",
+  "repo": "freetushkan/amneziawg-linux-kernel-module",
+  "run_url": "https://github.com/freetushkan/amneziawg-linux-kernel-module/actions/runs/43859596461",
+  "ok": true,
+  "date": "2026-11-16 11:44 UTC"
+ }
+]

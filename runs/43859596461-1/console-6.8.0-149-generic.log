@@ -1,0 +1,598 @@
+cSeaBIOS (version 1.16.3-debian-1.16.3-2)
+
+
+iPXE (https://ipxe.org) 00:03.0 CA00 PCI2.10 PnP PMM+7EFCADD0+7EF0ADD0 CA00
+Press Ctrl-B to configure iPXE (PCI 00:03.0)...                                                                               
+
+
+@@ BEGIN strict
+@@C c3 AmneziaWG 3.x|header protection, random trailers, content padding, S1-S4, H ranges
+@@C c3nohp AmneziaWG 3.x, no HeaderProtectionKey|random trailers, content padding, S1-S4, H ranges
+@@C c2 AmneziaWG 2.x|S1-S4, H ranges
+@@C c2nos AmneziaWG 2.x, no S3/S4|S1/S2, H ranges
+@@C c1 AmneziaWG 1.x|S1/S2, fixed H (range low bounds)
+@@C wg WireGuard|in-tree wireguard.ko
+1. Client-initiated handshakes
+  PASS c3 reaches the server
+@@R t1.connect.c3 pass c3 reaches the server
+  PASS c3nohp reaches the server
+@@R t1.connect.c3nohp pass c3nohp reaches the server
+  PASS c2 reaches the server
+@@R t1.connect.c2 pass c2 reaches the server
+  PASS c2nos reaches the server
+@@R t1.connect.c2nos pass c2nos reaches the server
+  PASS c1 reaches the server
+@@R t1.connect.c1 pass c1 reaches the server
+  PASS wg reaches the server
+@@R t1.connect.wg pass wg reaches the server
+  PASS server sees c3 as 'full protocol'
+@@R t1.detect.c3 pass server sees c3 as 'full protocol'
+  PASS server sees c3nohp as 'AmneziaWG 3.x without header protection'
+@@R t1.detect.c3nohp pass server sees c3nohp as 'AmneziaWG 3.x without header protection'
+  PASS server sees c2 as 'AmneziaWG 2.x'
+@@R t1.detect.c2 pass server sees c2 as 'AmneziaWG 2.x'
+  PASS server sees c2nos as 'AmneziaWG 2.x without S3/S4'
+@@R t1.detect.c2nos pass server sees c2nos as 'AmneziaWG 2.x without S3/S4'
+  PASS server sees c1 as 'AmneziaWG 1.x'
+@@R t1.detect.c1 pass server sees c1 as 'AmneziaWG 1.x'
+  PASS server sees wg as 'WireGuard'
+@@R t1.detect.wg pass server sees wg as 'WireGuard'
+  PASS every client got answers in its own format
+@@R t1.own_format pass every client got answers in its own format
+2. No loss with ambiguous transport headers
+  KNOWN c3: 40.3333% loss in the upstream client (RandomTrailers + wide H1/H2)
+@@R t2.loss.c3 known c3: 40.3333% loss in the upstream client (RandomTrailers + wide H1/H2)
+  KNOWN c3nohp: 38.3333% loss in the upstream client (RandomTrailers + wide H1/H2)
+@@R t2.loss.c3nohp known c3nohp: 38.3333% loss in the upstream client (RandomTrailers + wide H1/H2)
+  PASS c2: 300 pings, 0% loss
+@@R t2.loss.c2 pass c2: 300 pings, 0% loss
+  PASS c2nos: 300 pings, 0% loss
+@@R t2.loss.c2nos pass c2nos: 300 pings, 0% loss
+  PASS c1: 300 pings, 0% loss
+@@R t2.loss.c1 pass c1: 300 pings, 0% loss
+  PASS wg: 300 pings, 0% loss
+@@R t2.loss.wg pass wg: 300 pings, 0% loss
+3. Server-initiated handshakes to unknown peers (compat=2)
+  PASS server reaches c3
+@@R t3.reach.c3 pass server reaches c3
+  PASS server reaches c3nohp
+@@R t3.reach.c3nohp pass server reaches c3nohp
+  PASS server reaches c2
+@@R t3.reach.c2 pass server reaches c2
+  PASS server reaches c2nos
+@@R t3.reach.c2nos pass server reaches c2nos
+  PASS server reaches c1
+@@R t3.reach.c1 pass server reaches c1
+  PASS server reaches wg
+@@R t3.reach.wg pass server reaches wg
+  PASS server sees c3 as 'full protocol'
+@@R t3.detect.c3 pass server sees c3 as 'full protocol'
+  PASS server sees c3nohp as 'AmneziaWG 3.x without header protection'
+@@R t3.detect.c3nohp pass server sees c3nohp as 'AmneziaWG 3.x without header protection'
+  PASS server sees c2 as 'AmneziaWG 2.x'
+@@R t3.detect.c2 pass server sees c2 as 'AmneziaWG 2.x'
+  PASS server sees c2nos as 'AmneziaWG 2.x without S3/S4'
+@@R t3.detect.c2nos pass server sees c2nos as 'AmneziaWG 2.x without S3/S4'
+  PASS server sees c1 as 'AmneziaWG 1.x'
+@@R t3.detect.c1 pass server sees c1 as 'AmneziaWG 1.x'
+  PASS server sees wg as 'WireGuard'
+@@R t3.detect.wg pass server sees wg as 'WireGuard'
+  PASS every client got answers in its own format
+@@R t3.own_format pass every client got answers in its own format
+4. compat=0 is upstream behaviour
+  PASS c3: connects
+@@R t4.c3 pass c3: connects
+  PASS c3nohp: rejected
+@@R t4.c3nohp pass c3nohp: rejected
+  PASS c2: rejected
+@@R t4.c2 pass c2: rejected
+  PASS c2nos: rejected
+@@R t4.c2nos pass c2nos: rejected
+  PASS c1: rejected
+@@R t4.c1 pass c1: rejected
+  PASS wg: rejected
+@@R t4.wg pass wg: rejected
+5. No mutual downgrade between two hosts running the fallback
+  PASS client reaches the restarted server
+@@R t5.reach pass client reaches the restarted server
+  PASS both sides use the full protocol
+@@R t5.full pass both sides use the full protocol
+ALL PASSED
+@@ END strict rc=0
+@@ BEGIN own
+@@C c3 AmneziaWG 3.x|header protection, random trailers, content padding, S1-S4, H ranges
+@@C c3nohp AmneziaWG 3.x, no HeaderProtectionKey|random trailers, content padding, S1-S4, H ranges
+@@C c2 AmneziaWG 2.x|S1-S4, H ranges
+@@C c2nos AmneziaWG 2.x, no S3/S4|S1/S2, H ranges
+@@C c1 AmneziaWG 1.x|S1/S2, fixed H (range low bounds)
+@@C wg WireGuard|in-tree wireguard.ko
+1. Client-initiated handshakes
+  PASS c3 reaches the server
+@@R t1.connect.c3 pass c3 reaches the server
+  PASS c3nohp reaches the server
+@@R t1.connect.c3nohp pass c3nohp reaches the server
+  PASS c2 reaches the server
+@@R t1.connect.c2 pass c2 reaches the server
+  PASS c2nos reaches the server
+@@R t1.connect.c2nos pass c2nos reaches the server
+  PASS c1 reaches the server
+@@R t1.connect.c1 pass c1 reaches the server
+  PASS wg reaches the server
+@@R t1.connect.wg pass wg reaches the server
+  PASS server sees c3 as 'full protocol'
+@@R t1.detect.c3 pass server sees c3 as 'full protocol'
+  PASS server sees c3nohp as 'AmneziaWG 3.x without header protection'
+@@R t1.detect.c3nohp pass server sees c3nohp as 'AmneziaWG 3.x without header protection'
+  PASS server sees c2 as 'AmneziaWG 2.x'
+@@R t1.detect.c2 pass server sees c2 as 'AmneziaWG 2.x'
+  PASS server sees c2nos as 'AmneziaWG 2.x without S3/S4'
+@@R t1.detect.c2nos pass server sees c2nos as 'AmneziaWG 2.x without S3/S4'
+  PASS server sees c1 as 'AmneziaWG 1.x'
+@@R t1.detect.c1 pass server sees c1 as 'AmneziaWG 1.x'
+  PASS server sees wg as 'WireGuard'
+@@R t1.detect.wg pass server sees wg as 'WireGuard'
+  PASS every client got answers in its own format
+@@R t1.own_format pass every client got answers in its own format
+2. No loss with ambiguous transport headers
+  PASS c3: 300 pings, 0% loss
+@@R t2.loss.c3 pass c3: 300 pings, 0% loss
+  PASS c3nohp: 300 pings, 0% loss
+@@R t2.loss.c3nohp pass c3nohp: 300 pings, 0% loss
+  PASS c2: 300 pings, 0% loss
+@@R t2.loss.c2 pass c2: 300 pings, 0% loss
+  PASS c2nos: 300 pings, 0% loss
+@@R t2.loss.c2nos pass c2nos: 300 pings, 0% loss
+  PASS c1: 300 pings, 0% loss
+@@R t2.loss.c1 pass c1: 300 pings, 0% loss
+  PASS wg: 300 pings, 0% loss
+@@R t2.loss.wg pass wg: 300 pings, 0% loss
+3. Server-initiated handshakes to unknown peers (compat=2)
+  PASS server reaches c3
+@@R t3.reach.c3 pass server reaches c3
+  PASS server reaches c3nohp
+@@R t3.reach.c3nohp pass server reaches c3nohp
+  PASS server reaches c2
+@@R t3.reach.c2 pass server reaches c2
+  PASS server reaches c2nos
+@@R t3.reach.c2nos pass server reaches c2nos
+  PASS server reaches c1
+@@R t3.reach.c1 pass server reaches c1
+  PASS server reaches wg
+@@R t3.reach.wg pass server reaches wg
+  PASS server sees c3 as 'full protocol'
+@@R t3.detect.c3 pass server sees c3 as 'full protocol'
+  PASS server sees c3nohp as 'AmneziaWG 3.x without header protection'
+@@R t3.detect.c3nohp pass server sees c3nohp as 'AmneziaWG 3.x without header protection'
+  PASS server sees c2 as 'AmneziaWG 2.x'
+@@R t3.detect.c2 pass server sees c2 as 'AmneziaWG 2.x'
+  PASS server sees c2nos as 'AmneziaWG 2.x without S3/S4'
+@@R t3.detect.c2nos pass server sees c2nos as 'AmneziaWG 2.x without S3/S4'
+  PASS server sees c1 as 'AmneziaWG 1.x'
+@@R t3.detect.c1 pass server sees c1 as 'AmneziaWG 1.x'
+  PASS server sees wg as 'WireGuard'
+@@R t3.detect.wg pass server sees wg as 'WireGuard'
+  PASS every client got answers in its own format
+@@R t3.own_format pass every client got answers in its own format
+4. compat=0 is upstream behaviour
+  PASS c3: connects
+@@R t4.c3 pass c3: connects
+  PASS c3nohp: rejected
+@@R t4.c3nohp pass c3nohp: rejected
+  PASS c2: rejected
+@@R t4.c2 pass c2: rejected
+  PASS c2nos: rejected
+@@R t4.c2nos pass c2nos: rejected
+  PASS c1: rejected
+@@R t4.c1 pass c1: rejected
+  PASS wg: rejected
+@@R t4.wg pass wg: rejected
+5. No mutual downgrade between two hosts running the fallback
+  PASS client reaches the restarted server
+@@R t5.reach pass client reaches the restarted server
+  PASS both sides use the full protocol
+@@R t5.full pass both sides use the full protocol
+ALL PASSED
+@@ END own rc=0
+@@ BEGIN dmesg
+[    0.006093] ACPI: HPET id: 0x8086a201 base: 0xfed00000
+[    0.006097] TSC deadline timer available
+[    0.006098] smpboot: Allowing 2 CPUs, 0 hotplug CPUs
+[    0.006127] kvm-guest: APIC: eoi() replaced with kvm_guest_apic_eoi_write()
+[    0.006155] kvm-guest: KVM setup pv remote TLB flush
+[    0.006168] kvm-guest: setup PV sched yield
+[    0.006175] PM: hibernation: Registered nosave memory: [mem 0x00000000-0x00000fff]
+[    0.006177] PM: hibernation: Registered nosave memory: [mem 0x0009f000-0x000fffff]
+[    0.006178] [mem 0x80000000-0xfeffbfff] available for PCI devices
+[    0.006180] Booting paravirtualized kernel on KVM
+[    0.006182] clocksource: refined-jiffies: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 1910969940391419 ns
+[    0.006187] setup_percpu: NR_CPUS:8192 nr_cpumask_bits:2 nr_cpu_ids:2 nr_node_ids:1
+[    0.006342] percpu: Embedded 86 pages/cpu s229376 r8192 d114688 u1048576
+[    0.006346] pcpu-alloc: s229376 r8192 d114688 u1048576 alloc=1*2097152
+[    0.006348] pcpu-alloc: [0] 0 1 
+[    0.006415] kvm-guest: PV spinlocks enabled
+[    0.006416] PV qspinlock hash table entries: 256 (order: 0, 4096 bytes, linear)
+[    0.006419] Kernel command line: console=ttyS0 panic=-1 quiet loglevel=1
+[    0.006480] random: crng init done
+[    0.006622] Dentry cache hash table entries: 262144 (order: 9, 2097152 bytes, linear)
+[    0.006732] Inode-cache hash table entries: 131072 (order: 8, 1048576 bytes, linear)
+[    0.006796] Fallback order for Node 0: 0 
+[    0.006799] Built 1 zonelists, mobility grouping on.  Total pages: 515808
+[    0.006800] Policy zone: DMA32
+[    0.006804] mem auto-init: stack:all(zero), heap alloc:on, heap free:off
+[    0.008635] Memory: 2000164K/2096632K available (22528K kernel code, 4444K rwdata, 14456K rodata, 4948K init, 4756K bss, 96208K reserved, 0K cma-reserved)
+[    0.009069] SLUB: HWalign=64, Order=0-3, MinObjects=0, CPUs=2, Nodes=1
+[    0.020879] ftrace: allocating 57855 entries in 228 pages
+[    0.020882] ftrace: allocated 228 pages with 4 groups
+[    0.021773] Dynamic Preempt: voluntary
+[    0.021933] rcu: Preemptible hierarchical RCU implementation.
+[    0.021934] rcu: 	RCU restricting CPUs from NR_CPUS=8192 to nr_cpu_ids=2.
+[    0.021935] 	Trampoline variant of Tasks RCU enabled.
+[    0.021935] 	Rude variant of Tasks RCU enabled.
+[    0.021936] 	Tracing variant of Tasks RCU enabled.
+[    0.021937] rcu: RCU calculated value of scheduler-enlistment delay is 100 jiffies.
+[    0.021937] rcu: Adjusting geometry for rcu_fanout_leaf=16, nr_cpu_ids=2
+[    0.021946] RCU Tasks: Setting shift to 1 and lim to 1 rcu_task_cb_adjust=1 rcu_task_cpu_ids=2.
+[    0.021948] RCU Tasks Rude: Setting shift to 1 and lim to 1 rcu_task_cb_adjust=1 rcu_task_cpu_ids=2.
+[    0.021949] RCU Tasks Trace: Setting shift to 1 and lim to 1 rcu_task_cb_adjust=1 rcu_task_cpu_ids=2.
+[    0.023901] NR_IRQS: 524544, nr_irqs: 440, preallocated irqs: 16
+[    0.024159] rcu: srcu_init: Setting srcu_struct sizes based on contention.
+[    0.043621] Console: colour VGA+ 80x25
+[    0.043692] printk: legacy console [ttyS0] enabled
+[    0.043723] ACPI: Core revision 20230628
+[    0.043930] clocksource: hpet: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 19112604467 ns
+[    0.044116] APIC: Switch to symmetric I/O mode setup
+[    0.044722] x2apic enabled
+[    0.045423] APIC: Switched APIC routing to: physical x2apic
+[    0.045430] kvm-guest: APIC: send_IPI_mask() replaced with kvm_send_ipi_mask()
+[    0.045436] kvm-guest: APIC: send_IPI_mask_allbutself() replaced with kvm_send_ipi_mask_allbutself()
+[    0.045437] kvm-guest: setup PV IPIs
+[    0.048291] ..TIMER: vector=0x30 apic1=0 pin1=2 apic2=-1 pin2=-1
+[    0.048346] tsc: Marking TSC unstable due to TSCs unsynchronized
+[    0.048352] Calibrating delay loop (skipped) preset value.. 5192.24 BogoMIPS (lpj=2596124)
+[    0.048766] x86/cpu: User Mode Instruction Prevention (UMIP) activated
+[    0.049056] Last level iTLB entries: 4KB 512, 2MB 255, 4MB 127
+[    0.049057] Last level dTLB entries: 4KB 512, 2MB 255, 4MB 127, 1GB 0
+[    0.049352] Spectre V1 : Mitigation: usercopy/swapgs barriers and __user pointer sanitization
+[    0.049355] Spectre V2 : Mitigation: Retpolines
+[    0.049356] Spectre V2 : Spectre v2 / SpectreRSB: Filling RSB on context switch and VMEXIT
+[    0.049358] Speculative Store Bypass: Vulnerable
+[    0.049460] x86/fpu: Supporting XSAVE feature 0x001: 'x87 floating point registers'
+[    0.049461] x86/fpu: Supporting XSAVE feature 0x002: 'SSE registers'
+[    0.049462] x86/fpu: Supporting XSAVE feature 0x004: 'AVX registers'
+[    0.049462] x86/fpu: Supporting XSAVE feature 0x020: 'AVX-512 opmask'
+[    0.049463] x86/fpu: Supporting XSAVE feature 0x040: 'AVX-512 Hi256'
+[    0.049463] x86/fpu: Supporting XSAVE feature 0x080: 'AVX-512 ZMM_Hi256'
+[    0.049464] x86/fpu: xstate_offset[2]:  576, xstate_sizes[2]:  256
+[    0.049465] x86/fpu: xstate_offset[5]:  832, xstate_sizes[5]:   64
+[    0.049466] x86/fpu: xstate_offset[6]:  896, xstate_sizes[6]:  512
+[    0.049466] x86/fpu: xstate_offset[7]: 1408, xstate_sizes[7]: 1024
+[    0.049467] x86/fpu: Enabled xstate features 0xe7, context size is 2432 bytes, using 'compacted' format.
+[    0.071135] Freeing SMP alternatives memory: 48K
+[    0.071140] pid_max: default: 32768 minimum: 301
+[    0.071186] LSM: initializing lsm=lockdown,capability,landlock,yama,apparmor,integrity
+[    0.071196] landlock: Up and running.
+[    0.071197] Yama: becoming mindful.
+[    0.071228] AppArmor: AppArmor initialized
+[    0.071256] Mount-cache hash table entries: 4096 (order: 3, 32768 bytes, linear)
+[    0.071259] Mountpoint-cache hash table entries: 4096 (order: 3, 32768 bytes, linear)
+[    0.071624] smpboot: CPU0: AMD EPYC 9V45 96-Core Processor (family: 0x1a, model: 0x2, stepping: 0x1)
+[    0.071869] Performance Events: PMU not available due to virtualization, using software events only.
+[    0.072010] signal: max sigframe size: 3376
+[    0.072032] rcu: Hierarchical SRCU implementation.
+[    0.072033] rcu: 	Max phase no-delay instances is 400.
+[    0.072348] NMI watchdog: Perf NMI watchdog permanently disabled
+[    0.072348] smp: Bringing up secondary CPUs ...
+[    0.072526] smpboot: x86: Booting SMP configuration:
+[    0.072527] .... node  #0, CPUs:      #1
+[    0.074392] smp: Brought up 1 node, 2 CPUs
+[    0.074395] smpboot: Max logical packages: 1
+[    0.074395] smpboot: Total of 2 processors activated (10384.49 BogoMIPS)
+[    0.075066] devtmpfs: initialized
+[    0.075382] x86/mm: Memory block size: 128MB
+[    0.075593] clocksource: jiffies: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 1911260446275000 ns
+[    0.075593] futex hash table entries: 512 (order: 3, 32768 bytes, linear)
+[    0.075593] pinctrl core: initialized pinctrl subsystem
+[    0.075668] PM: RTC time: 11:39:33, date: 2026-11-16
+[    0.075986] NET: Registered PF_NETLINK/PF_ROUTE protocol family
+[    0.076049] DMA: preallocated 256 KiB GFP_KERNEL pool for atomic allocations
+[    0.076062] DMA: preallocated 256 KiB GFP_KERNEL|GFP_DMA pool for atomic allocations
+[    0.076067] DMA: preallocated 256 KiB GFP_KERNEL|GFP_DMA32 pool for atomic allocations
+[    0.076074] audit: initializing netlink subsys (disabled)
+[    0.076355] audit: type=2000 audit(1794829173.842:1): state=initialized audit_enabled=0 res=1
+[    0.076434] thermal_sys: Registered thermal governor 'fair_share'
+[    0.076435] thermal_sys: Registered thermal governor 'bang_bang'
+[    0.076436] thermal_sys: Registered thermal governor 'step_wise'
+[    0.076437] thermal_sys: Registered thermal governor 'user_space'
+[    0.076437] thermal_sys: Registered thermal governor 'power_allocator'
+[    0.076444] cpuidle: using governor ladder
+[    0.076446] cpuidle: using governor menu
+[    0.077763] acpiphp: ACPI Hot Plug PCI Controller Driver version: 0.5
+[    0.077763] PCI: Using configuration type 1 for base access
+[    0.077763] PCI: Using configuration type 1 for extended access
+[    0.077763] kprobes: kprobe jump-optimization is enabled. All kprobes are optimized if possible.
+[    0.088405] HugeTLB: registered 1.00 GiB page size, pre-allocated 0 pages
+[    0.088409] HugeTLB: 16380 KiB vmemmap can be freed for a 1.00 GiB page
+[    0.088410] HugeTLB: registered 2.00 MiB page size, pre-allocated 0 pages
+[    0.088411] HugeTLB: 28 KiB vmemmap can be freed for a 2.00 MiB page
+[    0.100496] ACPI: Added _OSI(Module Device)
+[    0.100496] ACPI: Added _OSI(Processor Device)
+[    0.100496] ACPI: Added _OSI(Processor Aggregator Device)
+[    0.100831] ACPI: 1 ACPI AML tables successfully acquired and loaded
+[    0.101867] ACPI: _OSC evaluation for CPUs failed, trying _PDC
+[    0.101867] ACPI: Interpreter enabled
+[    0.101867] ACPI: PM: (supports S0 S3 S4 S5)
+[    0.101867] ACPI: Using IOAPIC for interrupt routing
+[    0.101867] PCI: Using host bridge windows from ACPI; if necessary, use "pci=nocrs" and report a bug
+[    0.101867] PCI: Using E820 reservations for host bridge windows
+[    0.101867] ACPI: Enabled 2 GPEs in block 00 to 0F
+[    0.103624] ACPI: PCI Root Bridge [PCI0] (domain 0000 [bus 00-ff])
+[    0.103630] acpi PNP0A03:00: _OSC: OS supports [ExtendedConfig ASPM ClockPM Segments MSI EDR HPX-Type3]
+[    0.103892] acpiphp: Slot [3] registered
+[    0.103915] acpiphp: Slot [4] registered
+[    0.103936] acpiphp: Slot [5] registered
+[    0.103958] acpiphp: Slot [6] registered
+[    0.103979] acpiphp: Slot [7] registered
+[    0.104001] acpiphp: Slot [8] registered
+[    0.104023] acpiphp: Slot [9] registered
+[    0.104044] acpiphp: Slot [10] registered
+[    0.104066] acpiphp: Slot [11] registered
+[    0.104087] acpiphp: Slot [12] registered
+[    0.104122] acpiphp: Slot [13] registered
+[    0.104143] acpiphp: Slot [14] registered
+[    0.104165] acpiphp: Slot [15] registered
+[    0.104186] acpiphp: Slot [16] registered
+[    0.104207] acpiphp: Slot [17] registered
+[    0.104229] acpiphp: Slot [18] registered
+[    0.104250] acpiphp: Slot [19] registered
+[    0.104271] acpiphp: Slot [20] registered
+[    0.104293] acpiphp: Slot [21] registered
+[    0.104314] acpiphp: Slot [22] registered
+[    0.104335] acpiphp: Slot [23] registered
+[    0.104356] acpiphp: Slot [24] registered
+[    0.104378] acpiphp: Slot [25] registered
+[    0.104399] acpiphp: Slot [26] registered
+[    0.104421] acpiphp: Slot [27] registered
+[    0.104442] acpiphp: Slot [28] registered
+[    0.104463] acpiphp: Slot [29] registered
+[    0.104484] acpiphp: Slot [30] registered
+[    0.104506] acpiphp: Slot [31] registered
+[    0.104526] PCI host bridge to bus 0000:00
+[    0.104527] pci_bus 0000:00: root bus resource [io  0x0000-0x0cf7 window]
+[    0.104529] pci_bus 0000:00: root bus resource [io  0x0d00-0xffff window]
+[    0.104529] pci_bus 0000:00: root bus resource [mem 0x000a0000-0x000bffff window]
+[    0.104530] pci_bus 0000:00: root bus resource [mem 0x80000000-0xfebfffff window]
+[    0.104531] pci_bus 0000:00: root bus resource [mem 0x100000000-0x17fffffff window]
+[    0.104532] pci_bus 0000:00: root bus resource [bus 00-ff]
+[    0.104927] pci 0000:00:00.0: [8086:1237] type 00 class 0x060000 conventional PCI endpoint
+[    0.106001] pci 0000:00:01.0: [8086:7000] type 00 class 0x060100 conventional PCI endpoint
+[    0.107113] pci 0000:00:01.1: [8086:7010] type 00 class 0x010180 conventional PCI endpoint
+[    0.108117] pci 0000:00:01.1: BAR 4 [io  0xc040-0xc04f]
+[    0.108209] pci 0000:00:01.1: BAR 0 [io  0x01f0-0x01f7]: legacy IDE quirk
+[    0.108210] pci 0000:00:01.1: BAR 1 [io  0x03f6]: legacy IDE quirk
+[    0.108211] pci 0000:00:01.1: BAR 2 [io  0x0170-0x0177]: legacy IDE quirk
+[    0.108211] pci 0000:00:01.1: BAR 3 [io  0x0376]: legacy IDE quirk
+[    0.108483] pci 0000:00:01.3: [8086:7113] type 00 class 0x068000 conventional PCI endpoint
+[    0.109354] pci 0000:00:01.3: quirk: [io  0x0600-0x063f] claimed by PIIX4 ACPI
+[    0.109374] pci 0000:00:01.3: quirk: [io  0x0700-0x070f] claimed by PIIX4 SMB
+[    0.109804] pci 0000:00:02.0: [1234:1111] type 00 class 0x030000 conventional PCI endpoint
+[    0.111320] pci 0000:00:02.0: BAR 0 [mem 0xfd000000-0xfdffffff pref]
+[    0.111353] pci 0000:00:02.0: BAR 2 [mem 0xfebb0000-0xfebb0fff]
+[    0.111428] pci 0000:00:02.0: ROM [mem 0xfeba0000-0xfebaffff pref]
+[    0.111559] pci 0000:00:02.0: Video device with shadowed ROM at [mem 0x000c0000-0x000dffff]
+[    0.111845] pci 0000:00:03.0: [8086:100e] type 00 class 0x020000 conventional PCI endpoint
+[    0.113181] pci 0000:00:03.0: BAR 0 [mem 0xfeb80000-0xfeb9ffff]
+[    0.113200] pci 0000:00:03.0: BAR 1 [io  0xc000-0xc03f]
+[    0.113293] pci 0000:00:03.0: ROM [mem 0xfeb00000-0xfeb7ffff pref]
+[    0.157194] ACPI: PCI: Interrupt link LNKA configured for IRQ 10
+[    0.157334] ACPI: PCI: Interrupt link LNKB configured for IRQ 10
+[    0.157448] ACPI: PCI: Interrupt link LNKC configured for IRQ 11
+[    0.157560] ACPI: PCI: Interrupt link LNKD configured for IRQ 11
+[    0.157624] ACPI: PCI: Interrupt link LNKS configured for IRQ 9
+[    0.158359] iommu: Default domain type: Translated
+[    0.158359] iommu: DMA domain TLB invalidation policy: lazy mode
+[    0.158594] SCSI subsystem initialized
+[    0.158613] libata version 3.00 loaded.
+[    0.158613] ACPI: bus type USB registered
+[    0.158613] usbcore: registered new interface driver usbfs
+[    0.158613] usbcore: registered new interface driver hub
+[    0.158613] usbcore: registered new device driver usb
+[    0.158613] pps_core: LinuxPPS API ver. 1 registered
+[    0.158613] pps_core: Software ver. 5.3.6 - Copyright 2005-2007 Rodolfo Giometti <giometti@linux.it>
+[    0.158613] PTP clock support registered
+[    0.158613] EDAC MC: Ver: 3.0.0
+[    0.158613] NetLabel: Initializing
+[    0.158613] NetLabel:  domain hash size = 128
+[    0.158613] NetLabel:  protocols = UNLABELED CIPSOv4 CALIPSO
+[    0.158613] NetLabel:  unlabeled traffic allowed by default
+[    0.159383] mctp: management component transport protocol core
+[    0.159383] NET: Registered PF_MCTP protocol family
+[    0.159383] PCI: Using ACPI for IRQ routing
+[    0.159383] PCI: pci_cache_line_size set to 64 bytes
+[    0.159600] e820: reserve RAM buffer [mem 0x0009fc00-0x0009ffff]
+[    0.159602] e820: reserve RAM buffer [mem 0x7ffe0000-0x7fffffff]
+[    0.159616] pci 0000:00:02.0: vgaarb: setting as boot VGA device
+[    0.159616] pci 0000:00:02.0: vgaarb: bridge control possible
+[    0.159616] pci 0000:00:02.0: vgaarb: VGA device added: decodes=io+mem,owns=io+mem,locks=none
+[    0.159616] vgaarb: loaded
+[    0.159616] hpet0: at MMIO 0xfed00000, IRQs 2, 8, 0
+[    0.159616] hpet0: 3 comparators, 64-bit 100.000000 MHz counter
+[    0.163390] clocksource: Switched to clocksource kvm-clock
+[    0.163864] VFS: Disk quotas dquot_6.6.0
+[    0.163870] VFS: Dquot-cache hash table entries: 512 (order 0, 4096 bytes)
+[    0.164022] AppArmor: AppArmor Filesystem Enabled
+[    0.164035] pnp: PnP ACPI init
+[    0.164112] pnp 00:02: [dma 2]
+[    0.164336] pnp: PnP ACPI: found 6 devices
+[    0.170802] clocksource: acpi_pm: mask: 0xffffff max_cycles: 0xffffff, max_idle_ns: 2085701024 ns
+[    0.170847] NET: Registered PF_INET protocol family
+[    0.170880] IP idents hash table entries: 32768 (order: 6, 262144 bytes, linear)
+[    0.179600] tcp_listen_portaddr_hash hash table entries: 1024 (order: 2, 16384 bytes, linear)
+[    0.179613] Table-perturb hash table entries: 65536 (order: 6, 262144 bytes, linear)
+[    0.179621] TCP established hash table entries: 16384 (order: 5, 131072 bytes, linear)
+[    0.179644] TCP bind hash table entries: 16384 (order: 7, 524288 bytes, linear)
+[    0.179656] TCP: Hash tables configured (established 16384 bind 16384)
+[    0.179689] MPTCP token hash table entries: 2048 (order: 4, 49152 bytes, linear)
+[    0.179698] UDP hash table entries: 1024 (order: 3, 32768 bytes, linear)
+[    0.179702] UDP-Lite hash table entries: 1024 (order: 3, 32768 bytes, linear)
+[    0.179729] NET: Registered PF_UNIX/PF_LOCAL protocol family
+[    0.179734] NET: Registered PF_XDP protocol family
+[    0.179744] pci_bus 0000:00: resource 4 [io  0x0000-0x0cf7 window]
+[    0.179747] pci_bus 0000:00: resource 5 [io  0x0d00-0xffff window]
+[    0.179747] pci_bus 0000:00: resource 6 [mem 0x000a0000-0x000bffff window]
+[    0.179748] pci_bus 0000:00: resource 7 [mem 0x80000000-0xfebfffff window]
+[    0.179749] pci_bus 0000:00: resource 8 [mem 0x100000000-0x17fffffff window]
+[    0.179822] pci 0000:00:01.0: PIIX3: Enabling Passive Release
+[    0.179844] pci 0000:00:00.0: Limiting direct PCI/PCI transfers
+[    0.179962] PCI: CLS 0 bytes, default 64
+[    0.180119] Trying to unpack rootfs image as initramfs...
+[    0.182418] Initialise system trusted keyrings
+[    0.182426] Key type blacklist registered
+[    0.184202] workingset: timestamp_bits=36 max_order=19 bucket_order=0
+[    0.184206] zbud: loaded
+[    0.184486] squashfs: version 4.0 (2009/01/31) Phillip Lougher
+[    0.186287] fuse: init (API version 7.39)
+[    0.186468] integrity: Platform Keyring initialized
+[    0.186471] integrity: Machine keyring initialized
+[    0.192248] Key type asymmetric registered
+[    0.192249] Asymmetric key parser 'x509' registered
+[    0.192261] Block layer SCSI generic (bsg) driver version 0.4 loaded (major 243)
+[    0.193209] io scheduler mq-deadline registered
+[    0.193364] shpchp: Standard Hot Plug PCI Controller Driver version: 0.4
+[    0.193452] input: Power Button as /devices/LNXSYSTM:00/LNXPWRBN:00/input/input0
+[    0.193655] ACPI: button: Power Button [PWRF]
+[    0.194065] Serial: 8250/16550 driver, 32 ports, IRQ sharing enabled
+[    0.219503] 00:04: ttyS0 at I/O 0x3f8 (irq = 4, base_baud = 115200) is a 16550A
+[    0.223507] Linux agpgart interface v0.103
+[    0.224428] loop: module loaded
+[    0.224523] ata_piix 0000:00:01.1: version 2.13
+[    0.226320] scsi host0: ata_piix
+[    0.226606] scsi host1: ata_piix
+[    0.226619] ata1: PATA max MWDMA2 cmd 0x1f0 ctl 0x3f6 bmdma 0xc040 irq 14 lpm-pol 0
+[    0.226620] ata2: PATA max MWDMA2 cmd 0x170 ctl 0x376 bmdma 0xc048 irq 15 lpm-pol 0
+[    0.226650] ACPI: bus type drm_connector registered
+[    0.226769] tun: Universal TUN/TAP device driver, 1.6
+[    0.226807] PPP generic driver version 2.4.2
+[    0.226875] i8042: PNP: PS/2 Controller [PNP0303:KBD,PNP0f13:MOU] at 0x60,0x64 irq 1,12
+[    0.228371] serio: i8042 KBD port at 0x60,0x64 irq 1
+[    0.228375] serio: i8042 AUX port at 0x60,0x64 irq 12
+[    0.228391] Freeing initrd memory: 5492K
+[    0.228463] mousedev: PS/2 mouse device common for all mice
+[    0.228978] input: AT Translated Set 2 keyboard as /devices/platform/i8042/serio0/input/input1
+[    0.229055] rtc_cmos 00:05: RTC can wake from S4
+[    0.230271] rtc_cmos 00:05: registered as rtc0
+[    0.230442] rtc_cmos 00:05: setting system clock to 2026-11-16T11:39:33 UTC (1794829173)
+[    0.230541] rtc_cmos 00:05: alarms up to one day, y3k, 242 bytes nvram, hpet irqs
+[    0.230544] i2c_dev: i2c /dev entries driver
+[    0.230555] device-mapper: core: CONFIG_IMA_DISABLE_HTABLE is disabled. Duplicate IMA measurements will not be recorded in the IMA log.
+[    0.230582] device-mapper: uevent: version 1.0.3
+[    0.230599] device-mapper: ioctl: 4.48.0-ioctl (2023-03-01) initialised: dm-devel@redhat.com
+[    0.230602] amd_pstate: the _CPC object is not present in SBIOS or ACPI disabled
+[    0.230637] ledtrig-cpu: registered to indicate activity on CPUs
+[    0.230674] drop_monitor: Initializing network drop monitor service
+[    0.230737] NET: Registered PF_INET6 protocol family
+[    0.231160] Segment Routing with IPv6
+[    0.231164] In-situ OAM (IOAM) with IPv6
+[    0.231198] NET: Registered PF_PACKET protocol family
+[    0.231227] Key type dns_resolver registered
+[    0.231463] IPI shorthand broadcast: enabled
+[    0.232244] sched_clock: Marking stable (210009101, 22177283)->(234209118, -2022734)
+[    0.232329] registered taskstats version 1
+[    0.232431] Loading compiled-in X.509 certificates
+[    0.232742] Loaded X.509 cert 'Build time autogenerated kernel key: 9a137e402f355547be6108f074230bd270d34d14'
+[    0.232957] Loaded X.509 cert 'Canonical Ltd. Live Patch Signing 2025 Kmod: d541cef61dc7e793b7eb7e899970a2eef0b5dc8c'
+[    0.233176] Loaded X.509 cert 'Canonical Ltd. Live Patch Signing: 14df34d1a87cf37625abec039ef2bf521249b969'
+[    0.233419] Loaded X.509 cert 'Canonical Ltd. Kernel Module Signing 2025 Kmod: 4627603d2357a2a3f81006370894c221175893e9'
+[    0.233645] Loaded X.509 cert 'Canonical Ltd. Kernel Module Signing: 88f752e560a1e0737e31163a466ad7b70a850c19'
+[    0.233646] blacklist: Loading compiled-in revocation X.509 certificates
+[    0.233657] Loaded X.509 cert 'Canonical Ltd. Secure Boot Signing: 61482aa2830d0ab2ad5af10b7250da9033ddcef0'
+[    0.233665] Loaded X.509 cert 'Canonical Ltd. Secure Boot Signing (2017): 242ade75ac4a15e50d50c84b0d45ff3eae707a03'
+[    0.233672] Loaded X.509 cert 'Canonical Ltd. Secure Boot Signing (ESM 2018): 365188c1d374d6b07c3c8f240f8ef722433d6a8b'
+[    0.233679] Loaded X.509 cert 'Canonical Ltd. Secure Boot Signing (2019): c0746fd6c5da3ae827864651ad66ae47fe24b3e8'
+[    0.233686] Loaded X.509 cert 'Canonical Ltd. Secure Boot Signing (2021 v1): a8d54bbb3825cfb94fa13c9f8a594a195c107b8d'
+[    0.233693] Loaded X.509 cert 'Canonical Ltd. Secure Boot Signing (2021 v2): 4cf046892d6fd3c9a5b03f98d845f90851dc6a8c'
+[    0.233699] Loaded X.509 cert 'Canonical Ltd. Secure Boot Signing (2021 v3): 100437bb6de6e469b581e61cd66bce3ef4ed53af'
+[    0.233707] Loaded X.509 cert 'Canonical Ltd. Secure Boot Signing (Ubuntu Core 2019): c1d57b8f6b743f23ee41f4f7ee292f06eecadfb9'
+[    0.235436] Key type .fscrypt registered
+[    0.235437] Key type fscrypt-provisioning registered
+[    0.235885] Key type encrypted registered
+[    0.235886] AppArmor: AppArmor sha256 policy hashing enabled
+[    0.235892] ima: No TPM chip found, activating TPM-bypass!
+[    0.235894] Loading compiled-in module X.509 certificates
+[    0.236117] Loaded X.509 cert 'Build time autogenerated kernel key: 9a137e402f355547be6108f074230bd270d34d14'
+[    0.236118] ima: Allocated hash algorithm: sha256
+[    0.236127] ima: No architecture policies found
+[    0.236134] evm: Initialising EVM extended attributes:
+[    0.236135] evm: security.selinux
+[    0.236136] evm: security.SMACK64
+[    0.236136] evm: security.SMACK64EXEC
+[    0.236137] evm: security.SMACK64TRANSMUTE
+[    0.236138] evm: security.SMACK64MMAP
+[    0.236138] evm: security.apparmor
+[    0.236138] evm: security.ima
+[    0.236138] evm: security.capability
+[    0.236139] evm: HMAC attrs: 0x1
+[    0.236543] PM:   Magic number: 2:532:681
+[    0.238687] RAS: Correctable Errors collector initialized.
+[    0.238747] clk: Disabling unused clocks
+[    0.383638] ata2: found unknown device (class 0)
+[    0.384747] ata2.00: ATAPI: QEMU DVD-ROM, 2.5+, max UDMA/100
+[    0.386467] scsi 1:0:0:0: CD-ROM            QEMU     QEMU DVD-ROM     2.5+ PQ: 0 ANSI: 5
+[    0.402137] sr 1:0:0:0: [sr0] scsi3-mmc drive: 4x/4x cd/rw xa/form2 tray
+[    0.415021] cdrom: Uniform CD-ROM driver Revision: 3.20
+[    0.421974] sr 1:0:0:0: Attached scsi CD-ROM sr0
+[    0.422175] sr 1:0:0:0: Attached scsi generic sg0 type 5
+[    0.423237] Freeing unused decrypted memory: 2028K
+[    0.423641] Freeing unused kernel image (initmem) memory: 4948K
+[    0.423642] Write protecting the kernel read-only data: 38912k
+[    0.423895] Freeing unused kernel image (rodata/data gap) memory: 1928K
+[    0.455936] x86/mm: Checked W+X mappings: passed, no W+X pages found.
+[    0.455943] Run /init as init process
+[    0.455944]   with arguments:
+[    0.455946]     /init
+[    0.455946]   with environment:
+[    0.455947]     HOME=/
+[    0.455947]     TERM=linux
+[    0.468147] wireguard: WireGuard 1.0.0 loaded. See www.wireguard.com for information.
+[    0.468149] wireguard: Copyright (C) 2015-2019 Jason A. Donenfeld <Jason@zx2c4.com>. All Rights Reserved.
+[    0.469807] amneziawg: module verification failed: signature and/or required key missing - tainting kernel
+[    0.470579] amneziawg: AmneziaWG 1.0.0 loaded. See amnezia.org for information.
+[    0.470579] amneziawg: Copyright (C) 2015-2019 Jason A. Donenfeld <Jason@zx2c4.com>. All Rights Reserved.
+[    0.470580] amneziawg: Copyright (C) 2024-2025 AmneziaVPN <admin@amnezia.org>. All Rights Reserved.
+[    0.471657] awgup: AmneziaWG 1.0.0 loaded. See amnezia.org for information.
+[    0.471657] awgup: Copyright (C) 2015-2019 Jason A. Donenfeld <Jason@zx2c4.com>. All Rights Reserved.
+[    0.471658] awgup: Copyright (C) 2024-2025 AmneziaVPN <admin@amnezia.org>. All Rights Reserved.
+[    0.595101] amneziawg: awgs: peer 6 (192.168.7.2:51820) speaks WireGuard
+[    0.595515] amneziawg: awgs: peer 4 (192.168.5.2:51820) speaks AmneziaWG 2.x
+[    0.595794] amneziawg: awgs: peer 4 (192.168.5.2:51820) speaks AmneziaWG 2.x without S3/S4
+[    0.595958] amneziawg: awgs: peer 3 (192.168.4.2:51820) speaks AmneziaWG 2.x
+[    0.595960] amneziawg: awgs: peer 5 (192.168.6.2:51820) speaks AmneziaWG 1.x
+[    0.596869] amneziawg: awgs: peer 2 (192.168.3.2:51820) speaks AmneziaWG 3.x without header protection
+[   30.919720] amneziawg: awgs: peer 10 (192.168.4.2:51820) speaks AmneziaWG 2.x
+[   30.919762] amneziawg: awgs: peer 11 (192.168.5.2:51820) speaks AmneziaWG 2.x
+[   30.919978] amneziawg: awgs: peer 9 (192.168.3.2:51820) speaks AmneziaWG 3.x without header protection
+[   36.119700] amneziawg: awgs: peer 12 (192.168.6.2:51820) speaks AmneziaWG 1.x
+[   41.319687] amneziawg: awgs: peer 13 (192.168.7.2:51820) speaks WireGuard
+[   46.103331] amneziawg: awgs: peer 11 (192.168.5.2:51820) speaks AmneziaWG 2.x without S3/S4
+[  109.071572] amneziawg: awgs: peer 26 (192.168.6.2:51820) speaks AmneziaWG 1.x
+[  109.071577] amneziawg: awgs: peer 25 (192.168.5.2:51820) speaks AmneziaWG 2.x
+[  109.071697] amneziawg: awgs: peer 23 (192.168.3.2:51820) speaks AmneziaWG 3.x without header protection
+[  109.071778] amneziawg: awgs: peer 24 (192.168.4.2:51820) speaks AmneziaWG 2.x
+[  109.072333] amneziawg: awgs: peer 25 (192.168.5.2:51820) speaks AmneziaWG 2.x without S3/S4
+[  110.095460] amneziawg: awgs: peer 27 (192.168.7.2:51820) speaks WireGuard
+[  113.528854] amneziawg: awgs: peer 40 (192.168.7.2:51820) speaks WireGuard
+[  113.529517] amneziawg: awgs: peer 36 (192.168.3.2:51820) speaks AmneziaWG 3.x without header protection
+[  113.529661] amneziawg: awgs: peer 37 (192.168.4.2:51820) speaks AmneziaWG 2.x
+[  113.530066] amneziawg: awgs: peer 38 (192.168.5.2:51820) speaks AmneziaWG 2.x without S3/S4
+[  113.530253] amneziawg: awgs: peer 39 (192.168.6.2:51820) speaks AmneziaWG 1.x
+[  138.623726] amneziawg: awgs: peer 45 (192.168.5.2:51820) speaks AmneziaWG 2.x without S3/S4
+[  138.624540] amneziawg: awgs: peer 43 (192.168.3.2:51820) speaks AmneziaWG 3.x without header protection
+[  138.624853] amneziawg: awgs: peer 44 (192.168.4.2:51820) speaks AmneziaWG 2.x
+[  143.831516] amneziawg: awgs: peer 46 (192.168.6.2:51820) speaks AmneziaWG 1.x
+[  149.007756] amneziawg: awgs: peer 47 (192.168.7.2:51820) speaks WireGuard
+[  211.471582] amneziawg: awgs: peer 60 (192.168.6.2:51820) speaks AmneziaWG 1.x
+[  212.495439] amneziawg: awgs: peer 61 (192.168.7.2:51820) speaks WireGuard
+[  213.007468] amneziawg: awgs: peer 58 (192.168.4.2:51820) speaks AmneziaWG 2.x
+[  213.007474] amneziawg: awgs: peer 57 (192.168.3.2:51820) speaks AmneziaWG 3.x without header protection
+[  213.008576] amneziawg: awgs: peer 59 (192.168.5.2:51820) speaks AmneziaWG 2.x without S3/S4
+@@ END dmesg
+[  216.587916] reboot: Power down
